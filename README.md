@@ -37,17 +37,17 @@ Main implementation of the inverse PINN. It defines:
 
 The inferred parameter vector is
 
-\[
+$$
 \left(V_0,\ r_0,\ a,\ \lambda_{\mathrm{SO}}\right).
-\]
+$$
 
 The remaining potential parameters are fixed to the adopted reference values:
 
-\[
+$$
 \kappa=0.639,\qquad
 r_{0,\mathrm{SO}}=1.16\ \mathrm{fm},\qquad
 a_{\mathrm{SO}}=0.662\ \mathrm{fm}.
-\]
+$$
 
 ### `plotting_diagnostics_results.py`
 
@@ -80,27 +80,22 @@ Finite-difference reference dataset containing nuclear single-particle states an
 
 The scalar wavefunction is represented in separable form:
 
-\[
-\Psi(r,\theta,\phi)
-=
-R(r)\Theta(\theta)\Phi(\phi).
-\]
+$$
+\Psi(r,\theta,\phi) = R(r)\Theta(\theta)\Phi(\phi).
+$$
 
 The radial component uses the physics-guided ansatz
 
-\[
-R(r)
-=
-r^l e^{-\beta r}N_R(r),
-\]
+$$
+R(r) = r^l e^{-\beta r}N_R(r),
+$$
 
 where \(N_R\) is a neural network. The factor \(r^l\) enforces the regular near-origin behavior and the exponential factor encourages bound-state decay.
 
 The total training objective combines
 
-\[
-\mathcal{L}
-=
+$$
+\mathcal{L} =
 w_E\mathcal{L}_E
 +
 w_R\mathcal{L}_R
@@ -114,7 +109,7 @@ w_{\mathrm{BC}}\mathcal{L}_{\mathrm{BC}}
 w_{\mathrm{orth}}\mathcal{L}_{\mathrm{orth}}
 +
 w_{\mathrm{KL}}\mathcal{L}_{\mathrm{KL}}.
-\]
+$$
 
 The terms correspond to:
 
