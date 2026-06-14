@@ -163,7 +163,7 @@ The example configuration uses:
 A = 56
 Z = 28
 is_proton = False
-max_states = 9
+max_states = 7
 epochs = 15000
 ```
 
