@@ -1000,7 +1000,7 @@ if __name__ == "__main__":
         A=56,
         Z=28,
         is_proton=False,
-        max_states=9,
+        max_states=7,
         epochs=15000,
         lr_wave=0.0005,
         lr_param=0.001,
