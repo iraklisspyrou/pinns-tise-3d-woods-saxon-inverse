@@ -1,0 +1,34 @@
+training:
+  batch_size: 32
+  epochs: 3
+  learning_rate: 0.0001
+  optimizer: Adam
+  lr_scheduler: None
+  loss_function: HuberLoss
+  regularization_type: None
+  loss_w_aif: 5.0
+  loss_w_myo: 10.0
+  loss_w_params: 0.01
+  stop_aif_epochs_w: 0.3
+  stop_myo_epochs_w: 0.3
+  mean_delta_aif: 1e-4
+  mean_delta_myo: 1e-4
+  fp_max: 5.0
+
+network_architecture:
+  aif:
+    num_layers: 2
+    dim_hidden: 64
+    w0: 25
+    w0_initial: 15
+  myo:
+    num_layers: 5
+    dim_hidden: 128
+    w0: 20
+    w0_initial: 25
+  params:
+    num_layers: 5
+    dim_hidden: 256
+    w0: 10
+    w0_initial: 20
+
