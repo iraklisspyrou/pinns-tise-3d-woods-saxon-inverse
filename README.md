@@ -142,7 +142,7 @@ python -m venv .venv
 Install the required packages:
 
 ```bash
-pip install numpy pandas matplotlib torch wandb
+pip install numpy pandas matplotlib torch wandb yalm pathlib
 ```
 
 `wandb` is optional. The diagnostic script can run with `use_wandb=False`.
@@ -181,6 +181,9 @@ lam_so = ... ± ...
 Import the training function and specify the nucleus and hyperparameters:
 
 ```python
+
+# adjust cofnig file accordingly
+
 from inverse_3d_tise_woods_saxon import (
     train_single_nucleus_full3d,
     infer_parameters_full3d,
@@ -188,39 +191,9 @@ from inverse_3d_tise_woods_saxon import (
 
 wave_net, param_net, history, sample = train_single_nucleus_full3d(
     dataset_path="ws_fd_dataset.npz",
-    A=56,
-    Z=28,
-    is_proton=False,
-    max_states=9,
-    epochs=15000,
-    lr_wave=5e-4,
-    lr_param=1e-3,
-    n_r_points=96,
-    Nr_norm=1024,
-    Nth_norm=512,
-    Nph_norm=512,
-    hidden_wave=256,
-    hidden_param=256,
-    emm=0,
-    wE=0.5,
-    wR=10.0,
-    wTh=5.0,
-    wPh=5.0,
-    wBC=5.0,
-    wORTH=5.0,
-    wKL=1e-3,
-    print_every=100,
 )
 
 parameters = infer_parameters_full3d(
-    wave_net,
-    param_net,
-    sample,
-    n_samples=2000,
-    n_r_points=96,
-    Nr_norm=1024,
-    Nth_norm=512,
-    Nph_norm=512,
 )
 
 print(parameters)
@@ -278,33 +251,7 @@ cases = [
 
 summary_df = run_many_nuclei_experiment(
     dataset_path="ws_fd_dataset.npz",
-    cases=cases,
-    max_states=7,
-    epochs=15000,
-    out_root="benchmark_outputs",
-    wandb_project="inverse-ws-pinn",
-    wandb_group="custom-benchmark",
-    use_wandb=False,
-    common_train_kwargs={
-        "lr_wave": 5e-4,
-        "lr_param": 1e-3,
-        "n_r_points": 96,
-        "Nr_norm": 1024,
-        "Nth_norm": 512,
-        "Nph_norm": 256,
-        "hidden_wave": 128,
-        "hidden_param": 128,
-        "emm": 0,
-        "wE": 0.5,
-        "wR": 10.0,
-        "wTh": 5.0,
-        "wPh": 5.0,
-        "wBC": 5.0,
-        "wORTH": 1.0,
-        "wKL": 1e-3,
-        "print_every": 100,
-        "log_every": 100,
-        "plot_every": None,
+config[]
     },
 )
 
@@ -338,27 +285,7 @@ from plotting_diagnostics_results import train_single_nucleus_instrumented
 wave_net, param_net, history, sample, summary = (
     train_single_nucleus_instrumented(
         dataset_path="ws_fd_dataset.npz",
-        A=56,
-        Z=28,
-        is_proton=False,
-        max_states=7,
-        epochs=15000,
-        lr_wave=5e-4,
-        lr_param=1e-3,
-        n_r_points=96,
-        Nr_norm=1024,
-        Nth_norm=512,
-        Nph_norm=256,
-        hidden_wave=128,
-        hidden_param=128,
-        emm=0,
-        wE=0.5,
-        wR=10.0,
-        wTh=5.0,
-        wPh=5.0,
-        wBC=5.0,
-        wORTH=1.0,
-        wKL=1e-3,
+        config[]
         out_root="single_nucleus_outputs",
         use_wandb=False,
     )
@@ -462,7 +389,7 @@ This configuration is suitable only for checking that the pipeline runs successf
 
 ## Citation
 
-When using this repository in academic work, cite the associated thesis or publication. A formal citation entry can be added here once the paper is available.
+When using this repository in academic work, cite the associated thesis or publication. 
 
 ## License
 
