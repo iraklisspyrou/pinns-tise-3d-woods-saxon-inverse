@@ -10,19 +10,37 @@ import torch
 import torch.nn as nn
 from dataclasses import dataclass
 import yaml
+from pathlib import Path
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if torch.cuda.is_available():
+    device = torch.device("cuda")  # Windows/Linux
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")  # MacOS
+else:
+    device = torch.device("cpu")
+
+
+config_path = Path("config.yaml")
+config = yaml.load(config_path.open(), Loader=yaml.FullLoader)
+
+
 torch.manual_seed(0)
 np.random.seed(0)
-hc = 197.3269804
-u = 931.49410242
-e2 = 1.43996448
-R_MAX = 25.0
+
+# Quantum constants
+const = config["const"]
+hc = const["hc"]
+u = const["u"]
+e2 = const["e2"]
+R_MAX = const["R_MAX"]
+kappa_fixed = const["kappa_fixed"]
+r0_so_fixed = const["r0_so_fixed"]
+a_so_fixed = const["a_so_fixed"]
+
+# global constants
 PI = math.pi
 TWOPI = 2.0 * math.pi
-kappa_fixed = 0.639
-r0_so_fixed = 1.16
-a_so_fixed = 0.662
+
 
 
 # Dataset loading and state selection
@@ -823,34 +841,36 @@ def compute_sample_loss_full3d(
 
 def train_single_nucleus_full3d(
     dataset_path="ws_fd_dataset.npz",
-    A=56,
-    Z=28,
-    is_proton=False,
-    max_states=6,
-    epochs=3000,
-    lr_wave=0.0005,
-    lr_param=0.0001,
-    n_r_points=64,
-    Nr_norm=1024,
-    Nth_norm=512,
-    Nph_norm=512,
-    hidden_wave=256,
-    hidden_param=256,
-    emm=0,
-    wE=50.0,
-    wR=5.0,
-    wTh=5.0,
-    wPh=5.0,
-    wBC=5.0,
-    wORTH=10.0,
-    wKL=0.001,
-    use_scheduler_wave=True,
-    use_scheduler_param=True,
-    gamma_wave=0.6,
-    gamma_param=0.5,
-    step_size_wave=1000,
-    step_size_param=1500,
-    print_every=100,
+    A = experiment["A"],
+    Z = experiment["Z"],
+    is_proton=experiment["is_proton"]
+    max_states=experiment["max_states"],
+    epochs=training["epochs"],
+    lr_wave=training["lr_wave"],
+    lr_param=training["lr_param"],
+    n_r_points = experiment["n_r_points"],
+    Nr_norm = experiment["Nr_norm"],
+    Nth_norm = experiment["Nth_norm"],
+    Nph_norm = experiment["Nph_norm"],
+    hidden_wave = training["hidden_wave"],
+    hidden_param = training["hidden_param"],
+    emm = training["emm"],
+    wE = training["wE"],
+    wR = training["wR"],
+    wTh = training["wTh"],
+    wPh = training["wPh"],
+    wBC = training["wBC"],
+    wORTH = training["wORTH"],
+    wKL = training["wKL"],
+    use_scheduler_wave = training["use_scheduler_wave"],
+    use_scheduler_param = training["use_scheduler_param"],
+    gamma_wave = training["gamma_wave"]
+    gamma_param = training["gamma_param"]
+
+    step_size_wave = training["step_size_wave"]
+    step_size_param = training["step_size_param"]
+
+    print_every = training["print_every"]
 ):
     """Train WaveNet and ParamNet jointly for one nucleus and nucleon species."""
     dataset = load_fd_dataset(dataset_path)
@@ -956,10 +976,10 @@ def infer_parameters_full3d(
     param_net,
     sample,
     n_samples=1000,
-    n_r_points=96,
-    Nr_norm=1024,
-    Nth_norm=512,
-    Nph_norm=512,
+    n_r_points = experiment["n_r_points"],
+    Nr_norm = experiment["Nr_norm"],
+    Nth_norm = experiment["Nth_norm"],
+    Nph_norm = experiment["Nph_norm"],
 ):
     """Estimate posterior means and standard deviations in physical parameter space."""
     wave_net.eval()
@@ -998,37 +1018,37 @@ def infer_parameters_full3d(
 if __name__ == "__main__":
     wave_net, param_net, history, sample = train_single_nucleus_full3d(
         dataset_path="ws_fd_dataset.npz",
-        A=56,
-        Z=28,
-        is_proton=False,
-        max_states=7,
-        epochs=15000,
-        lr_wave=0.0005,
-        lr_param=0.001,
-        n_r_points=96,
-        Nr_norm=1024,
-        Nth_norm=512,
-        Nph_norm=512,
-        hidden_wave=256,
-        hidden_param=256,
-        emm=0,
-        wE=0.5,
-        wR=10.0,
-        wTh=5.0,
-        wPh=5.0,
-        wBC=5.0,
-        wORTH=5.0,
-        wKL=0.001,
-        print_every=100,
+        A = experiment["A"],
+        Z = experiment["Z"],
+        is_proton=experiment["is_proton"]
+        max_states=experiment["max_states"],
+         epochs=training["epochs"],
+        lr_wave=training["lr_wave"],
+        lr_param=training["lr_param"],
+        n_r_points = experiment["n_r_points"],
+        Nr_norm = experiment["Nr_norm"],
+        Nth_norm = experiment["Nth_norm"],
+        Nph_norm = experiment["Nph_norm"],
+        hidden_wave = training["hidden_wave"],
+        hidden_param = training["hidden_param"],
+        emm = training["emm"],
+        wE = training["wE"],
+        wR = training["wR"],
+        wTh = training["wTh"],
+        wPh = training["wPh"],
+        wBC = training["wBC"],
+        wORTH = training["wORTH"],
+        wKL = training["wKL"],
+        print_every = training["print_every"],
     )
     pred = infer_parameters_full3d(
         wave_net,
         param_net,
         sample,
-        n_r_points=96,
-        Nr_norm=1024,
-        Nth_norm=512,
-        Nph_norm=512,
+        n_r_points = experiment["n_r_points"],
+        Nr_norm = experiment["Nr_norm"],
+        Nth_norm = experiment["Nth_norm"],
+        Nph_norm = experiment["Nph_norm"],
     )
     print("\n==============================================")
     print("FINAL INFERRED PARAMETERS WITH UNCERTAINTIES")
