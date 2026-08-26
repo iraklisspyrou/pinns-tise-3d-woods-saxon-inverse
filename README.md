@@ -41,6 +41,45 @@ The supplied datasets remain at repository root:
 - `wahlborn_synthetic_dataset.npz`
 - `experimental_dataset.npz`
 
+## Key results reported in the paper
+
+### Synthetic closure
+
+All six global parameters were recovered with sub-percent relative errors.
+After the inferred distribution means were reintroduced into the independent
+finite-difference solver, the spectral errors were:
+
+| Parameterization | FD closure MAE [MeV] |
+|---|---:|
+| Seminole | 0.0109 |
+| Wahlborn | 0.0131 |
+
+### Experimental spectra
+
+The primary result is the physical-space distribution mean, which does not
+require selecting an individual parameter sample.
+
+| Potential expression | Reference MAE [MeV] | PINN mean MAE [MeV] |
+|---|---:|---:|
+| Seminole | 0.7969 | 0.8068 |
+| Wahlborn | 1.0783 | 0.8303 |
+
+The experimental identification set contains 42 levels: 24 neutron and 18
+proton levels from `40Ca`, `48Ca`, `132Sn` and `208Pb`. The complete
+experimental dataset contains 96 entries, and `90Zr` is retained as an
+out-of-calibration case.
+
+For the common 94-state Seminole comparison, the finite-difference
+least-squares fit gives MAE/RMSE values of 0.8101/1.1807 MeV, while the
+benchmark-selected PINN sample gives 0.8056/1.1525 MeV. This sampled result is
+included only as a supplementary benchmark; it is not treated as an unbiased
+test estimator. The work therefore does not claim that the PINN is globally
+more accurate than least squares.
+
+The standard deviations produced by ParamNet are model-derived output spreads
+and qualitative indicators of concentration or parameter stiffness. They are
+not calibrated Bayesian credible intervals.
+
 ## Installation
 
 ```bash
@@ -82,7 +121,9 @@ python scripts/train.py --config configs/seminole.yaml
 python scripts/train.py --config configs/wahlborn.yaml
 ```
 
-Training saves updated weights and resumable checkpoints in the configured output directory.
+The paper normalization is retained: one coefficient computed from the full
+separable wavefunction is applied to the radial component only. Training saves
+updated weights and resumable checkpoints in the configured output directory.
 
 ## Generate synthetic data
 
@@ -117,7 +158,7 @@ python scripts/lsq_fit.py --dataset experimental_dataset.npz
 ```
 
 This reproduces the separate finite-difference Levenberg--Marquardt comparison
-on the same 42 identification levels
+on the same 42 identification levels; it is not the original Seminole fit.
 
 ## Figures
 
@@ -147,4 +188,3 @@ are available.
   quadrature grids only for a smoke test.
 - ParamNet standard deviations are model-derived output spreads, not calibrated
   Bayesian credible intervals.
-
