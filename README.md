@@ -147,10 +147,8 @@ are available.
 - GPU results may differ slightly across CUDA and hardware versions.
 - Full paper runs are computationally expensive; use fewer epochs and smaller
   quadrature grids only for a smoke test.
-- ParamNet standard deviations are model-derived output spreads, not calibrated
-  Bayesian credible intervals.
 
-## Results reported in the paper
+## Key Results 
 
 ### Synthetic closure
 
@@ -186,8 +184,7 @@ test estimator. The work therefore does not claim that the PINN is globally
 more accurate than least squares.
 
 The standard deviations produced by ParamNet are model-derived output spreads
-and qualitative indicators of concentration or parameter stiffness. They are
-not calibrated Bayesian credible intervals.
+and qualitative indicators of concentration or parameter stiffness.
 
 ### Representative spectra
 
@@ -196,11 +193,11 @@ the PINN-inferred interaction. The displayed PINN spectra use the
 benchmark-selected parameter sample for illustration; the distribution mean
 remains the primary selection-free estimator.
 
-#### $^{48}$Ca
+#### 48Ca
 
 ![Experimental, Seminole and PINN single-particle spectra for calcium-48](docs/figures/spectrum_48Ca.jpg)
 
-#### $^{208}$Pb
+#### 208Pb
 
 ![Experimental, Seminole and PINN single-particle spectra for lead-208](docs/figures/spectrum_208Pb.jpg)
 
