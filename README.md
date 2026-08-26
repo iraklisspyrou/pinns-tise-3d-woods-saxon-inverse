@@ -82,9 +82,7 @@ python scripts/train.py --config configs/seminole.yaml
 python scripts/train.py --config configs/wahlborn.yaml
 ```
 
-The paper normalization is retained: one coefficient computed from the full
-separable wavefunction is applied to the radial component only. Training saves
-updated weights and resumable checkpoints in the configured output directory.
+Training saves updated weights and resumable checkpoints in the configured output directory.
 
 ## Generate synthetic data
 
@@ -119,7 +117,7 @@ python scripts/lsq_fit.py --dataset experimental_dataset.npz
 ```
 
 This reproduces the separate finite-difference Levenberg--Marquardt comparison
-on the same 42 identification levels; it is not the original Seminole fit.
+on the same 42 identification levels
 
 ## Figures
 
