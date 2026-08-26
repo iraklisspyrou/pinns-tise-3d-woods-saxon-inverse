@@ -1,401 +1,152 @@
-# Physics-Informed Inverse Modeling of the Woods–Saxon Potential
+# Coupled forward--inverse Woods--Saxon PINN
 
-This repository contains a physics-informed neural network framework for solving the three-dimensional time-independent Schrödinger equation and inferring Woods–Saxon mean-field parameters from nuclear single-particle spectra.
+Reproducible code for the paper **Probabilistic Physics-Informed Neural
+Solvers for Woods--Saxon Parameter Identification: A Coupled Forward--Inverse
+Approach**.
 
-The implementation combines:
+The implementation learns separated radial, polar and azimuthal spatial
+wavefunction components with WaveNet and a dataset-conditioned output
+distribution over six global Woods--Saxon parameters with ParamNet. The code
+supports both the Seminole and Wahlborn potential expressions.
 
-- a separable wavefunction representation,
-- physics-informed residual losses,
-- Rayleigh-quotient energy estimation,
-- boundary and orthogonality constraints,
-- probabilistic parameter inference,
-- Monte Carlo uncertainty estimation,
-- diagnostic plots for wavefunctions, energies, overlaps and parameter convergence.
-
-## Repository structure
+## Files
 
 ```text
-.
-├── inverse_3d_tise_woods_saxon.py
-├── plotting_diagnostics_results.py
-├── ws_fd_dataset.npz
-└── README.md
+configs/
+  seminole.yaml                 Seminole synthetic/experimental settings
+  wahlborn.yaml                 Wahlborn synthetic/experimental settings
+src/ws_pinn/
+  models.py                     MLP, WaveNet and ParamNet declarations
+  data_loader.py                NPZ loader and state selection
+  training.py                   joint forward--inverse training
+  fd_solver.py                  independent radial finite-difference solver
+  potentials.py                Seminole and Wahlborn Hamiltonians
+  losses.py                     physics-informed objective
+scripts/
+  train.py                      training command
+  generate_data.py              synthetic-data generation
+  fd_validation.py              independent closure validation
+  lsq_fit.py                    Levenberg--Marquardt least-squares baseline
+visualization/
+  training_visualization.py     loss and parameter histories
+  results_visualization.py      energy and residual figures
+  spectrum_plots.py             publication level-scheme figures
+checkpoints/
+  README.md                     names and contents of saved model files
 ```
 
-### `inverse_3d_tise_woods_saxon.py`
+The supplied datasets remain at repository root:
 
-Main implementation of the inverse PINN. It defines:
-
-- the Woods–Saxon mean-field potential,
-- the central, Coulomb, spin–orbit and isospin-dependent contributions,
-- the conditional radial, polar and azimuthal neural networks,
-- the probabilistic parameter network,
-- normalization and Rayleigh-energy calculations,
-- radial and angular Schrödinger residuals,
-- boundary and selective orthogonality losses,
-- single-nucleus training and parameter inference.
-
-The inferred parameter vector is
-
-$$
-\left(V_0,\ r_0,\ a,\ \lambda_{\mathrm{SO}}\right).
-$$
-
-The remaining potential parameters are fixed to the adopted reference values:
-
-$$
-\kappa=0.639,\qquad
-r_{0,\mathrm{SO}}=1.16\ \mathrm{fm},\qquad
-a_{\mathrm{SO}}=0.662\ \mathrm{fm}.
-$$
-
-### `plotting_diagnostics_results.py`
-
-Experiment and diagnostics module. It provides:
-
-- Weights & Biases logging,
-- parameter and loss histories,
-- Monte Carlo uncertainty estimation,
-- random radial-probe sensitivity tests,
-- wavefunction slices and marginal probability densities,
-- angular probability heatmaps,
-- predicted-versus-target energy plots,
-- overlap matrices,
-- single-nucleus and multi-nucleus experiments,
-- CSV, JSON, PNG and PyTorch checkpoint outputs.
-
-### `ws_fd_dataset.npz`
-
-Finite-difference reference dataset containing nuclear single-particle states and energies. Each sample is identified by:
-
-- mass number \(A\),
-- proton number \(Z\),
-- particle type,
-- radial quantum number \(n_r\),
-- orbital angular momentum \(l\),
-- total angular momentum \(j\),
-- reference energy.
-
-## Model overview
-
-The scalar wavefunction is represented in separable form:
-
-$$
-\Psi(r,\theta,\phi) = R(r)\Theta(\theta)\Phi(\phi).
-$$
-
-The radial component uses the physics-guided ansatz
-
-$$
-R(r) = r^l e^{-\beta r}N_R(r),
-$$
-
-where \(N_R\) is a neural network. The factor \(r^l\) enforces the regular near-origin behavior and the exponential factor encourages bound-state decay.
-
-The total training objective combines
-
-$$
-\mathcal{L} =
-w_E\mathcal{L}_E
-+
-w_R\mathcal{L}_R
-+
-w_\theta\mathcal{L}_\theta
-+
-w_\phi\mathcal{L}_\phi
-+
-w_{\mathrm{BC}}\mathcal{L}_{\mathrm{BC}}
-+
-w_{\mathrm{orth}}\mathcal{L}_{\mathrm{orth}}
-+
-w_{\mathrm{KL}}\mathcal{L}_{\mathrm{KL}}.
-$$
-
-The terms correspond to:
-
-- energy reconstruction,
-- radial Schrödinger residual,
-- polar and azimuthal equation residuals,
-- radial and periodic boundary conditions,
-- selective orthogonality between radial excitations,
-- variational regularization of parameter uncertainty.
+- `seminole_synthetic_dataset.npz`
+- `wahlborn_synthetic_dataset.npz`
+- `experimental_dataset.npz`
 
 ## Installation
 
-Python 3.10 or newer is recommended.
-
 ```bash
-git clone <your-repository-url>
-cd <your-repository-name>
-
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -e .
 ```
 
-On Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-Install the required packages:
+Install optional Weights & Biases support with:
 
 ```bash
-pip install numpy pandas matplotlib torch wandb yalm pathlib
+pip install -e ".[tracking]"
 ```
 
-`wandb` is optional. The diagnostic script can run with `use_wandb=False`.
+## Choose the experiment
 
-## Quick start
+There are exactly two configuration files, one per potential expression. In
+either file, change only:
 
-### 1. Run the default single-nucleus inverse problem
+```yaml
+data:
+  mode: synthetic
+```
 
-The default configuration in `inverse_3d_tise_woods_saxon.py` trains a neutron model for \(^{56}\mathrm{Ni}\):
+to:
+
+```yaml
+data:
+  mode: experimental
+```
+
+The corresponding dataset path, selected systems, number of states, epochs
+and output directory are then selected automatically.
+
+## Train
 
 ```bash
-python inverse_3d_tise_woods_saxon.py
+python scripts/train.py --config configs/seminole.yaml
+python scripts/train.py --config configs/wahlborn.yaml
 ```
 
-The example configuration uses:
+The paper normalization is retained: one coefficient computed from the full
+separable wavefunction is applied to the radial component only. Training saves
+updated weights and resumable checkpoints in the configured output directory.
 
-```python
-A = 56
-Z = 28
-is_proton = False
-max_states = 7
-epochs = 15000
-```
-
-At the end of training, the script prints the inferred parameter means and standard deviations:
-
-```text
-V0     = ... ± ... MeV
-r0     = ... ± ... fm
-a      = ... ± ... fm
-lam_so = ... ± ...
-```
-
-## Running a custom single-nucleus experiment
-
-Import the training function and specify the nucleus and hyperparameters:
-
-```python
-
-# adjust cofnig file accordingly
-
-from inverse_3d_tise_woods_saxon import (
-    train_single_nucleus_full3d,
-    infer_parameters_full3d,
-)
-
-wave_net, param_net, history, sample = train_single_nucleus_full3d(
-    dataset_path="ws_fd_dataset.npz",
-)
-
-parameters = infer_parameters_full3d(
-)
-
-print(parameters)
-```
-
-For protons, set:
-
-```python
-is_proton=True
-```
-
-## Running the diagnostics and multi-nucleus benchmark
-
-The diagnostics script imports the base PINN module through the `PINN_BASE_MODULE` environment variable.
-
-The module name must be provided **without** the `.py` extension.
-
-### Linux or macOS
+## Generate synthetic data
 
 ```bash
-export PINN_BASE_MODULE=inverse_3d_tise_woods_saxon
-python plotting_diagnostics_results.py
+python scripts/generate_data.py --config configs/seminole.yaml \
+  --output generated_seminole_dataset.npz
 ```
 
-### Windows PowerShell
+Use `configs/wahlborn.yaml` for the Wahlborn expression.
 
-```powershell
-$env:PINN_BASE_MODULE="inverse_3d_tise_woods_saxon"
-python plotting_diagnostics_results.py
-```
+## Independent finite-difference validation
 
-The script runs:
-
-```python
-run_full_multi_nucleus_benchmark()
-```
-
-with the benchmark configuration defined near the end of `plotting_diagnostics_results.py`.
-
-## Running diagnostics from Python or Jupyter
-
-```python
-import os
-
-os.environ["PINN_BASE_MODULE"] = "inverse_3d_tise_woods_saxon"
-
-from plotting_diagnostics_results import run_many_nuclei_experiment
-
-cases = [
-    (56, 28, False),
-    (56, 28, True),
-    (60, 28, False),
-    (60, 28, True),
-]
-
-summary_df = run_many_nuclei_experiment(
-    dataset_path="ws_fd_dataset.npz",
-config[]
-    },
-)
-
-display(summary_df)
-```
-
-Each case is represented by:
-
-```python
-(A, Z, is_proton)
-```
-
-For example:
-
-```python
-(56, 28, False)  # neutron states in 56Ni
-(56, 28, True)   # proton states in 56Ni
-```
-
-## Example: one instrumented experiment
-
-To train one nucleus and automatically generate diagnostics:
-
-```python
-import os
-
-os.environ["PINN_BASE_MODULE"] = "inverse_3d_tise_woods_saxon"
-
-from plotting_diagnostics_results import train_single_nucleus_instrumented
-
-wave_net, param_net, history, sample, summary = (
-    train_single_nucleus_instrumented(
-        dataset_path="ws_fd_dataset.npz",
-        config[]
-        out_root="single_nucleus_outputs",
-        use_wandb=False,
-    )
-)
-
-print(summary)
-```
-
-## Output files
-
-For each nucleus, the diagnostics pipeline creates a folder such as:
-
-```text
-paper_outputs_final/A56_Z28_n/
-```
-
-Typical outputs include:
-
-```text
-A56_Z28_n_training_history.csv
-A56_Z28_n_final_parameters.json
-A56_Z28_n_summary.json
-A56_Z28_n_energy_table.csv
-A56_Z28_n_wave_net.pt
-A56_Z28_n_param_net.pt
-A56_Z28_n_overlap_matrix.png
-A56_Z28_n_energy_pred_vs_target.png
-A56_Z28_n_energy_residuals.png
-A56_Z28_n_loss_components.png
-A56_Z28_n_param_V0_vs_epoch.png
-A56_Z28_n_param_r0_vs_epoch.png
-A56_Z28_n_param_a_vs_epoch.png
-A56_Z28_n_param_lam_so_vs_epoch.png
-```
-
-The random radial-probe diagnostic additionally generates:
-
-```text
-A56_Z28_n_random_radial_probe_parameter_inference.csv
-A56_Z28_n_random_radial_probe_summary.json
-```
-
-## Random radial-probe inference
-
-The parameter network is normally conditioned on radial wavefunction values sampled on a fixed grid.
-
-The diagnostic module can repeat inference using independently sampled radial points:
-
-\[
-r_i\sim U(0,R_{\max}).
-\]
-
-This test evaluates whether parameter estimates remain stable when the trained radial functions are queried at different locations.
-
-It should be interpreted as a **sampling-sensitivity diagnostic**, not as a new physical dataset.
-
-## Weights & Biases
-
-To enable online experiment tracking:
+Validate the reference values from the configuration:
 
 ```bash
-wandb login
+python scripts/fd_validation.py --config configs/seminole.yaml \
+  --dataset seminole_synthetic_dataset.npz
 ```
 
-Then run an experiment with:
+Validate a trained distribution-mean estimate:
 
-```python
-use_wandb=True
+```bash
+python scripts/fd_validation.py --config configs/seminole.yaml \
+  --parameters outputs/seminole_synthetic/final_global_parameter_prediction.json \
+  --dataset seminole_synthetic_dataset.npz
 ```
 
-Logged quantities include:
+## Least-squares baseline
 
-- total and component losses,
-- inferred parameter means,
-- inferred parameter uncertainties,
-- learning rates,
-- energy RMSE and MAE,
-- maximum off-diagonal overlap,
-- wavefunction and parameter plots.
+```bash
+python scripts/lsq_fit.py --dataset experimental_dataset.npz
+```
+
+This reproduces the separate finite-difference Levenberg--Marquardt comparison
+on the same 42 identification levels; it is not the original Seminole fit.
+
+## Figures
+
+```bash
+python visualization/training_visualization.py \
+  outputs/seminole_synthetic/training_history.csv
+
+python visualization/results_visualization.py \
+  outputs/seminole_synthetic/plots/final/all_nuclei_energy_table.csv
+
+python visualization/spectrum_plots.py \
+  --experimental experimental_dataset.npz \
+  --seminole seminole_reference_spectrum.npz \
+  --pinn pinn_spectrum.npz
+```
+
+The visualization commands save PDF by default where applicable, so plots can
+be regenerated without retraining when the corresponding CSV/NPZ result files
+are available.
 
 ## Reproducibility notes
 
-- NumPy and PyTorch random seeds are fixed in the base implementation.
-- Training may still vary slightly across GPU architectures and CUDA versions.
-- The network architecture, number of selected states and radial sampling resolution must remain consistent when loading saved checkpoints.
-- Full benchmark runs are computationally expensive. Reduce `epochs`, grid sizes and hidden dimensions for initial testing.
-
-A smaller test configuration could use:
-
-```python
-epochs = 100
-Nr_norm = 256
-Nth_norm = 128
-Nph_norm = 128
-hidden_wave = 64
-hidden_param = 64
-```
-
-This configuration is suitable only for checking that the pipeline runs successfully.
-
-
-## Citation
-
-When using this repository in academic work, cite the associated thesis or publication. 
-
-## License
-
-Add the license selected for the repository, for example:
-
-```text
-MIT License
-```
+- NumPy and PyTorch seeds are set through the YAML files.
+- The finite-difference solver is independent of the neural-network code.
+- GPU results may differ slightly across CUDA and hardware versions.
+- Full paper runs are computationally expensive; use fewer epochs and smaller
+  quadrature grids only for a smoke test.
+- ParamNet standard deviations are model-derived output spreads, not calibrated
+  Bayesian credible intervals.
 

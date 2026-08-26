@@ -1,0 +1,118 @@
+experiment:
+  name: wahlborn
+  potential: wahlborn
+
+# Change only this value to use the experimental identification set.
+data:
+  mode: synthetic
+  datasets:
+    synthetic:
+      path: wahlborn_synthetic_dataset.npz
+      output_directory: outputs/wahlborn_synthetic
+      states_per_system: 7
+      epochs: 30000
+      cases:
+        - [40, 20, neutron]
+        - [40, 20, proton]
+        - [48, 20, neutron]
+        - [48, 20, proton]
+        - [132, 50, neutron]
+        - [132, 50, proton]
+        - [208, 82, neutron]
+        - [208, 82, proton]
+    experimental:
+      path: experimental_dataset.npz
+      output_directory: outputs/wahlborn_experimental
+      states_per_system: 6
+      epochs: 17000
+      cases:
+        - [48, 20, proton]
+        - [132, 50, proton]
+        - [208, 82, proton]
+        - [40, 20, neutron]
+        - [48, 20, neutron]
+        - [132, 50, neutron]
+        - [208, 82, neutron]
+
+runtime:
+  device: auto
+  seed: 0
+  deterministic: false
+
+model:
+  wave_depth: 5
+  wave_width: 256
+  param_depth: 3
+  param_width: 256
+  radial_decay: 0.6
+  magnetic_projection: 0
+
+paramnet_input:
+  radial_probe_points: 96
+  radial_normalization: full_separable
+  sign_probe_index: 5
+
+parameter_bounds:
+  V0: [40.0, 65.0]
+  kappa: [0.30, 1.00]
+  r0: [1.15, 1.35]
+  a: [0.55, 0.75]
+  lam_so: [15.0, 40.0]
+  r0_so: [0.90, 1.35]
+
+quadrature:
+  radial: 1024
+  polar: 512
+  azimuthal: 256
+  orthogonality_points: 512
+
+training:
+  system_batch_size: 2
+  wave_learning_rate: 5.0e-4
+  param_learning_rate: 1.0e-3
+  latent_prior_std: 2.0
+  gradient_clip: 5.0
+
+loss_weights:
+  energy: 0.5
+  radial_residual: 10.0
+  polar_residual: 5.0
+  azimuthal_residual: 5.0
+  boundary: 5.0
+  orthogonality: 5.0
+  spin_orbit: 0.2
+  kl: 1.0e-4
+
+scheduler:
+  wave_enabled: true
+  param_enabled: true
+  wave_factor: 0.6
+  param_factor: 0.5
+  wave_step: 1500
+  param_step: 2000
+
+inference:
+  monte_carlo_samples: 10000
+  seed: 0
+
+reference_parameters:
+  V0: 51.00
+  kappa: 0.670
+  r0: 1.270
+  a: 0.670
+  lam_so: 32.0
+  r0_so: 1.270
+
+output:
+  checkpoint_every: 100
+  resume: true
+  wavefunction_cases: 4
+  heatmap_cases: 2
+  overlap_cases: 3
+
+logging:
+  print_every: 100
+  log_every: 100
+  plot_every: 1000
+  wandb: false
+
