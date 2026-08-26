@@ -15,6 +15,10 @@ supports both the Seminole and Wahlborn potential expressions.
 configs/
   seminole.yaml                 Seminole synthetic/experimental settings
   wahlborn.yaml                 Wahlborn synthetic/experimental settings
+data/
+  seminole_synthetic_dataset.npz
+  wahlborn_synthetic_dataset.npz
+  experimental_dataset.npz
 src/ws_pinn/
   models.py                     MLP, WaveNet and ParamNet declarations
   data_loader.py                NPZ loader and state selection
@@ -35,11 +39,11 @@ checkpoints/
   README.md                     names and contents of saved model files
 ```
 
-The supplied datasets remain at repository root:
+The supplied datasets are stored in `data/`:
 
-- `seminole_synthetic_dataset.npz`
-- `wahlborn_synthetic_dataset.npz`
-- `experimental_dataset.npz`
+- `data/seminole_synthetic_dataset.npz`
+- `data/wahlborn_synthetic_dataset.npz`
+- `data/experimental_dataset.npz`
 
 ## Installation
 
@@ -90,7 +94,7 @@ updated weights and resumable checkpoints in the configured output directory.
 
 ```bash
 python scripts/generate_data.py --config configs/seminole.yaml \
-  --output generated_seminole_dataset.npz
+  --output data/generated_seminole_dataset.npz
 ```
 
 Use `configs/wahlborn.yaml` for the Wahlborn expression.
@@ -101,7 +105,7 @@ Validate the reference values from the configuration:
 
 ```bash
 python scripts/fd_validation.py --config configs/seminole.yaml \
-  --dataset seminole_synthetic_dataset.npz
+  --dataset data/seminole_synthetic_dataset.npz
 ```
 
 Validate a trained distribution-mean estimate:
@@ -109,13 +113,13 @@ Validate a trained distribution-mean estimate:
 ```bash
 python scripts/fd_validation.py --config configs/seminole.yaml \
   --parameters outputs/seminole_synthetic/final_global_parameter_prediction.json \
-  --dataset seminole_synthetic_dataset.npz
+  --dataset data/seminole_synthetic_dataset.npz
 ```
 
 ## Least-squares baseline
 
 ```bash
-python scripts/lsq_fit.py --dataset experimental_dataset.npz
+python scripts/lsq_fit.py --dataset data/experimental_dataset.npz
 ```
 
 This reproduces the separate finite-difference Levenberg--Marquardt comparison
@@ -131,7 +135,7 @@ python visualization/results_visualization.py \
   outputs/seminole_synthetic/plots/final/all_nuclei_energy_table.csv
 
 python visualization/spectrum_plots.py \
-  --experimental experimental_dataset.npz \
+  --experimental data/experimental_dataset.npz \
   --seminole seminole_reference_spectrum.npz \
   --pinn pinn_spectrum.npz
 ```
@@ -147,8 +151,7 @@ are available.
 - GPU results may differ slightly across CUDA and hardware versions.
 - Full paper runs are computationally expensive; use fewer epochs and smaller
   quadrature grids only for a smoke test.
-
-## Key Results 
+## Key Results
 
 ### Synthetic closure
 

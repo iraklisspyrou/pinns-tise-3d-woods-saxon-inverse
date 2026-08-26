@@ -285,7 +285,7 @@ def parse_nucleus_token(token: str) -> tuple[int, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--experimental", default="experimental_dataset.npz")
+    parser.add_argument("--experimental", default="data/experimental_dataset.npz")
     parser.add_argument("--seminole", required=True, help="FD spectrum from reference parameters")
     parser.add_argument("--pinn", required=True, help="FD spectrum from inferred parameters")
     parser.add_argument("--output-dir", default="spectrum_plots")

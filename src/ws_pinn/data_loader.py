@@ -2,7 +2,7 @@
 
 import numpy as np
 
-def load_fd_dataset(path="ws_fd_dataset_2.npz"):
+def load_fd_dataset(path="data/wahlborn_synthetic_dataset.npz"):
     raw = np.load(path, allow_pickle=True)["data"]
     return list(raw)
 
@@ -148,13 +148,13 @@ def get_sample_by_nucleus(dataset, A, Z, is_proton, max_states=6):
     raise ValueError(f"No sample found for A={A}, Z={Z}, is_proton={is_proton}")
 
 
-def list_available_cases(dataset_path="ws_fd_dataset_2.npz"):
+def list_available_cases(dataset_path="data/wahlborn_synthetic_dataset.npz"):
     dataset = load_fd_dataset(dataset_path)
     return [(int(x["A"]), int(x["Z"]), bool(x["is_proton"])) for x in dataset]
 
 
 def build_multinucleus_samples(
-    dataset_path="ws_fd_dataset_2.npz",
+    dataset_path="data/wahlborn_synthetic_dataset.npz",
     cases=None,
     max_states=6,
     require_exact_states=True,

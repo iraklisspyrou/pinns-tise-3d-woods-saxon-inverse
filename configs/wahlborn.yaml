@@ -7,7 +7,7 @@ data:
   mode: synthetic
   datasets:
     synthetic:
-      path: wahlborn_synthetic_dataset.npz
+      path: data/wahlborn_synthetic_dataset.npz
       output_directory: outputs/wahlborn_synthetic
       states_per_system: 7
       epochs: 30000
@@ -21,7 +21,7 @@ data:
         - [208, 82, neutron]
         - [208, 82, proton]
     experimental:
-      path: experimental_dataset.npz
+      path: data/experimental_dataset.npz
       output_directory: outputs/wahlborn_experimental
       states_per_system: 6
       epochs: 17000
@@ -115,4 +115,3 @@ logging:
   log_every: 100
   plot_every: 1000
   wandb: false
-

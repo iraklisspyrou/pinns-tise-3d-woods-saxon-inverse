@@ -28,7 +28,7 @@ MODULE_NAME = 'ws_pinn.training'
 
 def train_global_multinucleus_instrumented(
     potential="seminole",
-    dataset_path="ws_fd_dataset_2.npz",
+    dataset_path="data/wahlborn_synthetic_dataset.npz",
     cases=None,
     max_states=8,
     epochs=15000,

@@ -26,7 +26,7 @@ def main() -> None:
     config = load_config(args.config)
     potential = config["experiment"]["potential"]
     params = FDParameters.from_mapping(config["reference_parameters"])
-    output = args.output or f"generated_{potential}_synthetic_dataset.npz"
+    output = args.output or f"data/generated_{potential}_synthetic_dataset.npz"
     path = generate_dataset(
         DEFAULT_NUCLEI,
         params,
@@ -39,4 +39,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
