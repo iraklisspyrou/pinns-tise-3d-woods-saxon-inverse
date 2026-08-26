@@ -41,45 +41,6 @@ The supplied datasets remain at repository root:
 - `wahlborn_synthetic_dataset.npz`
 - `experimental_dataset.npz`
 
-## Key results reported in the paper
-
-### Synthetic closure
-
-All six global parameters were recovered with sub-percent relative errors.
-After the inferred distribution means were reintroduced into the independent
-finite-difference solver, the spectral errors were:
-
-| Parameterization | FD closure MAE [MeV] |
-|---|---:|
-| Seminole | 0.0109 |
-| Wahlborn | 0.0131 |
-
-### Experimental spectra
-
-The primary result is the physical-space distribution mean, which does not
-require selecting an individual parameter sample.
-
-| Potential expression | Reference MAE [MeV] | PINN mean MAE [MeV] |
-|---|---:|---:|
-| Seminole | 0.7969 | 0.8068 |
-| Wahlborn | 1.0783 | 0.8303 |
-
-The experimental identification set contains 42 levels: 24 neutron and 18
-proton levels from `40Ca`, `48Ca`, `132Sn` and `208Pb`. The complete
-experimental dataset contains 96 entries, and `90Zr` is retained as an
-out-of-calibration case.
-
-For the common 94-state Seminole comparison, the finite-difference
-least-squares fit gives MAE/RMSE values of 0.8101/1.1807 MeV, while the
-benchmark-selected PINN sample gives 0.8056/1.1525 MeV. This sampled result is
-included only as a supplementary benchmark; it is not treated as an unbiased
-test estimator. The work therefore does not claim that the PINN is globally
-more accurate than least squares.
-
-The standard deviations produced by ParamNet are model-derived output spreads
-and qualitative indicators of concentration or parameter stiffness. They are
-not calibrated Bayesian credible intervals.
-
 ## Installation
 
 ```bash
@@ -188,3 +149,75 @@ are available.
   quadrature grids only for a smoke test.
 - ParamNet standard deviations are model-derived output spreads, not calibrated
   Bayesian credible intervals.
+
+## Results reported in the paper
+
+### Synthetic closure
+
+All six global parameters were recovered with sub-percent relative errors.
+After the inferred distribution means were reintroduced into the independent
+finite-difference solver, the spectral errors were:
+
+| Parameterization | FD closure MAE [MeV] |
+|---|---:|
+| Seminole | 0.0109 |
+| Wahlborn | 0.0131 |
+
+### Experimental spectra
+
+The primary result is the physical-space distribution mean, which does not
+require selecting an individual parameter sample.
+
+| Potential expression | Reference MAE [MeV] | PINN mean MAE [MeV] |
+|---|---:|---:|
+| Seminole | 0.7969 | 0.8068 |
+| Wahlborn | 1.0783 | 0.8303 |
+
+The experimental identification set contains 42 levels: 24 neutron and 18
+proton levels from `40Ca`, `48Ca`, `132Sn` and `208Pb`. The complete
+experimental dataset contains 96 entries, and `90Zr` is retained as an
+out-of-calibration case.
+
+For the common 94-state Seminole comparison, the finite-difference
+least-squares fit gives MAE/RMSE values of 0.8101/1.1807 MeV, while the
+benchmark-selected PINN sample gives 0.8056/1.1525 MeV. This sampled result is
+included only as a supplementary benchmark; it is not treated as an unbiased
+test estimator. The work therefore does not claim that the PINN is globally
+more accurate than least squares.
+
+The standard deviations produced by ParamNet are model-derived output spreads
+and qualitative indicators of concentration or parameter stiffness. They are
+not calibrated Bayesian credible intervals.
+
+### Representative spectra
+
+The level schemes compare experiment, the Seminole reference interaction and
+the PINN-inferred interaction. The displayed PINN spectra use the
+benchmark-selected parameter sample for illustration; the distribution mean
+remains the primary selection-free estimator.
+
+#### $^{48}$Ca
+
+![Experimental, Seminole and PINN single-particle spectra for calcium-48](docs/figures/spectrum_48Ca.jpg)
+
+#### $^{208}$Pb
+
+![Experimental, Seminole and PINN single-particle spectra for lead-208](docs/figures/spectrum_208Pb.jpg)
+
+### Forward-solution examples
+
+These panels illustrate learned separated spatial wavefunction
+representations for proton states in $^{208}$Pb. They are scalar spatial
+components and should not be interpreted as complete spinor wavefunctions.
+
+#### Radial probability densities
+
+![Learned radial probability densities for proton states in lead-208](docs/figures/radial_probability_208Pb_proton.jpg)
+
+#### Angular wavefunction slice
+
+![Angular wavefunction probability slice for proton states in lead-208](docs/figures/angular_slice_208Pb_proton.jpg)
+
+#### Angular probability heatmap
+
+![Angular probability heatmap for a proton state in lead-208](docs/figures/angular_heatmap_208Pb_proton.jpg)
