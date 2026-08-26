@@ -21,7 +21,7 @@ E2 = 1.43996448
 PARAMETER_NAMES = ("V0", "kappa", "r0", "a", "lambda_so", "r0_so")
 SEMINOLE_REFERENCE = np.array([52.06, 0.639, 1.260, 0.662, 24.1, 1.160], dtype=float)
 
-# Used only to draw a physically reasonable random initial point. LM itself is unbounded.
+# Used only to draw a physically reasonable random initial point. 
 START_LOW = np.array([40.0, 0.30, 1.15, 0.55, 15.0, 0.90], dtype=float)
 START_HIGH = np.array([65.0, 1.00, 1.35, 0.75, 40.0, 1.35], dtype=float)
 
