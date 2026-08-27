@@ -4,7 +4,7 @@ Reproducible code for the paper **Probabilistic Physics-Informed Neural
 Solvers for Woods--Saxon Parameter Identification: A Coupled Forward--Inverse
 Approach**.
 
-1. [Project Description](#1-project-description)
+1. [Project Overview](#1-project-overview)
 2. [Model / System Architecture](#2-model--system-architecture)
 3. [Getting Started & Installation](#3-getting-started--installation)
 4. [Usage Examples](#4-usage-examples)
@@ -12,7 +12,7 @@ Approach**.
 6. [Repository Structure](#6-repository-structure)
 7. [License](#7-license)
 
-## 1. Project Description
+## 1. Project Overview
 
 This repository implements a coupled differentiable solver for the forward
 solution of the three-dimensional time-independent Schrödinger equation and
