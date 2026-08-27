@@ -140,8 +140,7 @@ python scripts/train.py --config configs/wahlborn.yaml
 
 To run the **Seminole experimental** identification, first set
 `data.mode: experimental` in `configs/seminole.yaml`, then execute the first
-command. For a quick reviewer-style test, stop after the first printed epoch
-with `Ctrl+C`.
+command.
 
 Every run copies the exact input YAML and writes a resolved
 `run_manifest.json`. Its principal checkpoint files are:
@@ -243,26 +242,6 @@ python visualization/spectrum_plots.py \
 The visualization commands save PDF where applicable. Existing CSV/NPZ output
 files can therefore be plotted without retraining.
 
-### Short reviewer-style verification
-
-```bash
-python scripts/train.py --help
-python scripts/generate_data.py --help
-python scripts/fd_validation.py --help
-python scripts/lsq_fit.py --help
-
-python scripts/inspect_data.py --output-dir outputs/data_inspection
-
-python scripts/fd_validation.py --config configs/seminole.yaml \
-  --dataset data/seminole_synthetic_dataset.npz \
-  --output outputs/seminole_reference_fd.csv
-
-python scripts/lsq_fit.py --dataset data/experimental_dataset.npz \
-  --output-dir outputs/lsq_smoke --n-grid 400 --max-nfev 8 --verbose 1
-```
-
-For full reproduction, retain the reported YAML settings, complete training,
-and pass the resulting physical-space mean JSON to `fd_validation.py`.
 
 Reproducibility notes:
 
