@@ -10,7 +10,7 @@ data:
       path: data/seminole_synthetic_dataset.npz
       output_directory: outputs/seminole_synthetic
       states_per_system: 7
-      epochs: 30000
+      epochs: 17000
       cases:
         - [40, 20, neutron]
         - [48, 20, neutron]
