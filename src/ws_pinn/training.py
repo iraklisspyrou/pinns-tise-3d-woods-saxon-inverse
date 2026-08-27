@@ -1,8 +1,16 @@
-"""Checkpointed joint optimization of WaveNet and ParamNet."""
+"""Checkpointed joint optimization of WaveNet and ParamNet.
+
+The command-line entry point resolves every paper-relevant value from YAML
+before calling this module.  This file deliberately contains no competing set
+of experiment defaults.
+"""
 
 import json
+import shutil
 import time
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -14,76 +22,149 @@ except Exception:
     wandb = None
     WANDB_AVAILABLE = False
 
-from .constants import PRIOR_STD
-from .runtime import device, runtime_metadata
-from .parameters import DEFAULT_BOUNDS, ParameterBounds
 from .data_loader import build_multinucleus_samples
-from .models import GlobalContextParamNet, WaveNet3D
-from .losses import compute_multinucleus_loss_full3d
+from .diagnostics import (
+    PARAM_NAMES,
+    build_samples_table,
+    ensure_dir,
+    infer_global_stats,
+    plot_full_psi2_slice_vs_theta,
+    plot_global_energy_diagnostics,
+    plot_learning_rates,
+    plot_loss_history,
+    plot_overlap_matrices,
+    plot_parameter_history,
+    plot_parameter_summary,
+    plot_radial_wavefunctions,
+    plot_theta_phi_heatmaps,
+    save_history_csv,
+    species_tag,
+    wb_log,
+)
 from .inference import infer_global_raw_latent
+from .losses import compute_multinucleus_loss_full3d
+from .models import GlobalContextParamNet, WaveNet3D
+from .parameters import ParameterBounds
 from .potentials import set_potential_expression
-from .diagnostics import (PARAM_NAMES, build_samples_table, ensure_dir, infer_global_stats, plot_full_psi2_slice_vs_theta, plot_global_energy_diagnostics, plot_learning_rates, plot_loss_history, plot_overlap_matrices, plot_parameter_history, plot_parameter_summary, plot_radial_wavefunctions, plot_theta_phi_heatmaps, save_history_csv, species_tag, wb_log)
+from .runtime import device, runtime_metadata
 
-MODULE_NAME = 'ws_pinn.training'
+MODULE_NAME = "ws_pinn.training"
 
-def train_global_multinucleus_instrumented(
-    potential="seminole",
-    dataset_path="data/wahlborn_synthetic_dataset.npz",
-    cases=None,
-    max_states=8,
-    epochs=15000,
-    batch_size=None,
-    lr_wave=5e-4,
-    lr_param=1e-3,
-    n_r_points=96,
-    Nr_norm=512,
-    Nth_norm=256,
-    Nph_norm=128,
-    hidden_wave=256,
-    hidden_param=256,
-    wave_depth=5,
-    param_depth=3,
-    beta=0.6,
-    emm=0,
-    wE=10.0,
-    wR=10.0,
-    wTh=2.0,
-    wPh=2.0,
-    wBC=5.0,
-    wORTH=0.0,
-    wSO=10.0,
-    wKL=0.0,
-    prior_std=PRIOR_STD,
-    parameter_bounds: ParameterBounds = DEFAULT_BOUNDS,
-    radial_normalization="full_separable",
-    sign_probe_index=5,
-    orth_points=512,
-    use_scheduler_wave=True,
-    use_scheduler_param=True,
-    gamma_wave=0.6,
-    gamma_param=0.5,
-    step_size_wave=1000,
-    step_size_param=1500,
-    print_every=100,
-    log_every=100,
-    plot_every=1000,
-    checkpoint_every=100,
-    resume=True,
-    gradient_clip=5.0,
-    inference_samples=10_000,
-    inference_seed=0,
-    reference=None,
-    config_source=None,
-    out_dir="global_multinucleus_instrumented_outputs",
-    use_wandb=True,
-    wandb_project="inverse-ws-pinn",
-    wandb_run_name="global_multinucleus_six_parameter",
-    wandb_group=None,
-    log_model_watch=False,
-    final_wavefunction_cases=4,
-    final_heatmap_cases=2,
-    final_overlap_cases=3,
-):
+
+def _json_ready(value: Any) -> Any:
+    """Convert resolved settings into JSON/checkpoint-safe values."""
+    if isinstance(value, ParameterBounds):
+        return value.to_dict()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, Mapping):
+        return {str(key): _json_ready(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_ready(item) for item in value]
+    return value
+
+
+def _required_setting(settings: Mapping[str, Any], name: str) -> Any:
+    if name not in settings:
+        raise KeyError(f"Missing resolved training setting: {name}")
+    return settings[name]
+
+
+def train_global_multinucleus(settings: Mapping[str, Any]):
+    """Train one fully resolved experiment.
+
+    Parameters
+    ----------
+    settings:
+        Mapping returned by :func:`ws_pinn.config.training_settings`.  Keeping
+        one mapping as the API prevents direct calls from silently falling
+        back to settings that differ from the manuscript YAML files.
+    """
+    potential = str(_required_setting(settings, "potential"))
+    dataset_path = str(_required_setting(settings, "dataset_path"))
+    cases = list(_required_setting(settings, "cases"))
+    max_states = int(_required_setting(settings, "max_states"))
+    epochs = int(_required_setting(settings, "epochs"))
+    batch_size = _required_setting(settings, "batch_size")
+    lr_wave = float(_required_setting(settings, "lr_wave"))
+    lr_param = float(_required_setting(settings, "lr_param"))
+    n_r_points = int(_required_setting(settings, "n_r_points"))
+    Nr_norm = int(_required_setting(settings, "Nr_norm"))
+    Nth_norm = int(_required_setting(settings, "Nth_norm"))
+    Nph_norm = int(_required_setting(settings, "Nph_norm"))
+    hidden_wave = int(_required_setting(settings, "hidden_wave"))
+    hidden_param = int(_required_setting(settings, "hidden_param"))
+    wave_depth = int(_required_setting(settings, "wave_depth"))
+    param_depth = int(_required_setting(settings, "param_depth"))
+    beta = float(_required_setting(settings, "beta"))
+    emm = int(_required_setting(settings, "emm"))
+    wE = float(_required_setting(settings, "wE"))
+    wR = float(_required_setting(settings, "wR"))
+    wTh = float(_required_setting(settings, "wTh"))
+    wPh = float(_required_setting(settings, "wPh"))
+    wBC = float(_required_setting(settings, "wBC"))
+    wORTH = float(_required_setting(settings, "wORTH"))
+    wSO = float(_required_setting(settings, "wSO"))
+    wKL = float(_required_setting(settings, "wKL"))
+    prior_std = float(_required_setting(settings, "prior_std"))
+    parameter_bounds = _required_setting(settings, "parameter_bounds")
+    if not isinstance(parameter_bounds, ParameterBounds):
+        raise TypeError("parameter_bounds must be a ParameterBounds instance")
+    radial_normalization = str(
+        _required_setting(settings, "radial_normalization")
+    )
+    sign_probe_index = int(_required_setting(settings, "sign_probe_index"))
+    orth_points = int(_required_setting(settings, "orth_points"))
+    use_scheduler_wave = bool(_required_setting(settings, "use_scheduler_wave"))
+    use_scheduler_param = bool(_required_setting(settings, "use_scheduler_param"))
+    gamma_wave = float(_required_setting(settings, "gamma_wave"))
+    gamma_param = float(_required_setting(settings, "gamma_param"))
+    step_size_wave = int(_required_setting(settings, "step_size_wave"))
+    step_size_param = int(_required_setting(settings, "step_size_param"))
+    print_every = int(_required_setting(settings, "print_every"))
+    log_every = int(_required_setting(settings, "log_every"))
+    plot_every = _required_setting(settings, "plot_every")
+    checkpoint_every = int(_required_setting(settings, "checkpoint_every"))
+    resume = bool(_required_setting(settings, "resume"))
+    gradient_clip = float(_required_setting(settings, "gradient_clip"))
+    inference_samples = int(_required_setting(settings, "inference_samples"))
+    inference_seed = int(_required_setting(settings, "inference_seed"))
+    reference = _required_setting(settings, "reference")
+    config_source = str(_required_setting(settings, "config_source"))
+    out_dir = str(_required_setting(settings, "out_dir"))
+    use_wandb = bool(_required_setting(settings, "use_wandb"))
+    wandb_project = str(_required_setting(settings, "wandb_project"))
+    wandb_run_name = str(_required_setting(settings, "wandb_run_name"))
+    wandb_group = _required_setting(settings, "wandb_group")
+    log_model_watch = bool(_required_setting(settings, "log_model_watch"))
+    final_wavefunction_cases = int(
+        _required_setting(settings, "final_wavefunction_cases")
+    )
+    final_heatmap_cases = int(
+        _required_setting(settings, "final_heatmap_cases")
+    )
+    final_overlap_cases = int(
+        _required_setting(settings, "final_overlap_cases")
+    )
+    diagnostic_radial_points = int(
+        _required_setting(settings, "diagnostic_radial_points")
+    )
+    diagnostic_peak_radial_points = int(
+        _required_setting(settings, "diagnostic_peak_radial_points")
+    )
+    diagnostic_heatmap_theta_points = int(
+        _required_setting(settings, "diagnostic_heatmap_theta_points")
+    )
+    diagnostic_heatmap_phi_points = int(
+        _required_setting(settings, "diagnostic_heatmap_phi_points")
+    )
+    diagnostic_theta_slice_points = int(
+        _required_setting(settings, "diagnostic_theta_slice_points")
+    )
+    diagnostic_overlap_points = int(
+        _required_setting(settings, "diagnostic_overlap_points")
+    )
+
     set_potential_expression(potential)
     out_dir = ensure_dir(out_dir)
     plots_dir = ensure_dir(out_dir / "plots")
@@ -149,55 +230,38 @@ def train_global_multinucleus_instrumented(
         if use_scheduler_param else None
     )
 
-    config = {
-        "potential": potential,
-        "base_module": MODULE_NAME,
-        "dataset_path": dataset_path,
-        "cases": cases,
-        "n_samples": len(samples),
-        "skipped": skipped,
-        "max_states": max_states,
-        "epochs": epochs,
-        "batch_size": batch_size,
-        "lr_wave": lr_wave,
-        "lr_param": lr_param,
-        "n_r_points": n_r_points,
-        "Nr_norm": Nr_norm,
-        "Nth_norm": Nth_norm,
-        "Nph_norm": Nph_norm,
-        "hidden_wave": hidden_wave,
-        "hidden_param": hidden_param,
-        "wave_depth": wave_depth,
-        "param_depth": param_depth,
-        "beta": beta,
-        "emm": emm,
-        "wE": wE,
-        "wR": wR,
-        "wTh": wTh,
-        "wPh": wPh,
-        "wBC": wBC,
-        "wORTH": wORTH,
-        "wSO": wSO,
-        "wKL": wKL,
-        "prior_std": prior_std,
-        "parameter_bounds": parameter_bounds.to_dict(),
-        "radial_normalization": radial_normalization,
-        "sign_probe_index": sign_probe_index,
-        "orth_points": orth_points,
-        "param_input_dim": param_input_dim,
-        "parameter_mode": "one_global_context_informed_output_distribution",
-        "reference": reference,
-        "checkpoint_every": checkpoint_every,
-        "resume": resume,
-        "gradient_clip": gradient_clip,
-        "inference_samples": inference_samples,
-        "inference_seed": inference_seed,
-        "config_source": config_source,
+    # Preserve both the selected YAML values and every flattened effective
+    # setting.  Derived dimensions and runtime metadata are recorded separately
+    # so a checkpoint is self-describing without confusing this manifest with
+    # the input configuration object.
+    run_manifest = {
+        "module": MODULE_NAME,
+        "source_config": _json_ready(settings.get("source_config", {})),
+        "resolved_settings": _json_ready({
+            key: value
+            for key, value in settings.items()
+            if key != "source_config"
+        }),
+        "derived": {
+            "n_samples": len(samples),
+            "skipped": _json_ready(skipped),
+            "param_input_dim": param_input_dim,
+            "parameter_mode": (
+                "one_global_context_informed_output_distribution"
+            ),
+        },
         "runtime": runtime_metadata(),
     }
 
-    with open(out_dir / "config.json", "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
+    with open(out_dir / "run_manifest.json", "w", encoding="utf-8") as f:
+        json.dump(run_manifest, f, indent=2)
+
+    # Copy the exact human-authored YAML used to start this run.  The manifest
+    # above contains resolved paths and derived values; this file preserves the
+    # original public experiment description.
+    source_path = Path(config_source)
+    if source_path.is_file():
+        shutil.copy2(source_path, out_dir / "input_config.yaml")
 
     if use_wandb:
         if not WANDB_AVAILABLE:
@@ -209,7 +273,7 @@ def train_global_multinucleus_instrumented(
             project=wandb_project,
             name=wandb_run_name,
             group=wandb_group,
-            config=config,
+            config=run_manifest,
             reinit=True,
         )
 
@@ -224,7 +288,7 @@ def train_global_multinucleus_instrumented(
             )
 
     print("\n========================================================")
-    print("GLOBAL MULTI-NUCLEUS SIX-PARAMETER INSTRUMENTED TRAINING")
+    print("GLOBAL MULTI-NUCLEUS COUPLED FORWARD-INVERSE TRAINING")
     print("========================================================")
     print(f"Base module: {MODULE_NAME}")
     print(f"Device: {device}")
@@ -265,7 +329,7 @@ def train_global_multinucleus_instrumented(
             "best_loss": float(best_loss),
             "best_epoch": best_epoch,
             "history": history,
-            "config": config,
+            "run_manifest": run_manifest,
             "torch_rng_state": torch.get_rng_state(),
             "numpy_rng_state": np.random.get_state(),
         }
@@ -348,7 +412,7 @@ def train_global_multinucleus_instrumented(
         optimizer_wave.zero_grad(set_to_none=True)
         optimizer_param.zero_grad(set_to_none=True)
 
-        loss, metrics, per_sample_rows = compute_multinucleus_loss_full3d(
+        loss, metrics, _per_sample_rows = compute_multinucleus_loss_full3d(
             wave_net=wave_net,
             param_net=param_net,
             samples=samples,
@@ -404,7 +468,7 @@ def train_global_multinucleus_instrumented(
                     "best_loss": best_loss,
                     "best_epoch": best_epoch,
                     "history": history,
-                    "config": config,
+                    "run_manifest": run_manifest,
                 },
                 checkpoints_dir / "best_training_loss.pt",
             )
@@ -674,6 +738,7 @@ def train_global_multinucleus_instrumented(
         wave_net,
         samples,
         final_plots_dir / "radial_wavefunctions",
+        n_r=diagnostic_radial_points,
         Nr_norm=Nr_norm,
         Nth_norm=Nth_norm,
         Nph_norm=Nph_norm,
@@ -690,6 +755,9 @@ def train_global_multinucleus_instrumented(
         Nph_norm=Nph_norm,
         max_cases=final_heatmap_cases,
         max_states_per_case=3,
+        radial_peak_points=diagnostic_peak_radial_points,
+        n_theta=diagnostic_heatmap_theta_points,
+        n_phi=diagnostic_heatmap_phi_points,
         log_wandb=use_wandb,
     )
 
@@ -701,7 +769,8 @@ def train_global_multinucleus_instrumented(
         Nth_norm=Nth_norm,
         Nph_norm=Nph_norm,
         max_cases=final_wavefunction_cases,
-        n_theta=400,
+        radial_peak_points=diagnostic_peak_radial_points,
+        n_theta=diagnostic_theta_slice_points,
         phi0=0.0,
         use_common_r0=True,
         log_wandb=use_wandb,
@@ -715,6 +784,7 @@ def train_global_multinucleus_instrumented(
         Nth_norm=Nth_norm,
         Nph_norm=Nph_norm,
         max_cases=final_overlap_cases,
+        n_points=diagnostic_overlap_points,
         log_wandb=use_wandb,
     )
 
@@ -768,3 +838,7 @@ def train_global_multinucleus_instrumented(
         "energy_results": energy_results,
         "summary": summary,
     }
+
+
+# Compatibility alias for notebooks written against the first modular release.
+train_global_multinucleus_instrumented = train_global_multinucleus

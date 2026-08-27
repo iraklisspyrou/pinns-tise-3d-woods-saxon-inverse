@@ -2,10 +2,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+*.egg-info/
+build/
+dist/
 outputs/
 training_plots/
 result_plots/
 spectrum_plots/
 checkpoints/*.pt
 *.tmp
-

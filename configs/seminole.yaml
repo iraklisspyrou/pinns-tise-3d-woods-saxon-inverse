@@ -63,6 +63,32 @@ quadrature:
   azimuthal: 256
   orthogonality_points: 512
 
+# These grids affect exported figures only, not the training objective.
+diagnostics:
+  radial_plot_points: 800
+  radial_peak_points: 600
+  heatmap_theta_points: 160
+  heatmap_phi_points: 220
+  theta_slice_points: 400
+  overlap_points: 8000
+
+# Inputs used by scripts/generate_data.py to reconstruct the supplied
+# Seminole synthetic systems with the independent radial FD solver.
+generation:
+  n_grid: 2400
+  r_max: 25.0
+  max_l: 7
+  max_nr: 3
+  nuclei:
+    - [16, 8]
+    - [40, 20]
+    - [48, 20]
+    - [56, 28]
+    - [90, 40]
+    - [100, 50]
+    - [132, 50]
+    - [208, 82]
+
 training:
   system_batch_size: 2
   wave_learning_rate: 5.0e-4

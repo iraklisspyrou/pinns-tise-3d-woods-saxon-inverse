@@ -3,7 +3,15 @@
 import torch
 import torch.nn as nn
 
-from .scaling import scale_energy, scale_nucleus, scale_phi, scale_quantum, scale_r, scale_theta
+from .scaling import (
+    scale_energy,
+    scale_nucleus,
+    scale_phi,
+    scale_quantum,
+    scale_r,
+    scale_theta,
+)
+
 
 class ConditionalMLP(nn.Module):
     def __init__(self, input_dim, output_dim=1, hidden=128, depth=5):
@@ -26,6 +34,13 @@ class ConditionalMLP(nn.Module):
 
 
 class WaveNet3D(nn.Module):
+    """Shared conditional networks for separated ``R``, ``Theta`` and ``Phi``.
+
+    Every component is conditioned on the complete selected energy vector,
+    nucleus descriptors and the state's ``(nr, l, j)`` quantum numbers.  The
+    radial output includes the analytic near-origin factor ``r**l`` and an
+    exponential tail, leaving the MLP to learn the remaining shape.
+    """
     def __init__(self, n_states, hidden=128, depth=5, beta=0.6):
         super().__init__()
         self.n_states = n_states
@@ -52,6 +67,7 @@ class WaveNet3D(nn.Module):
         raw = self.R_net(x)
         rc = r.clamp_min(1e-8)
         l = int(st["l"])
+        # Hard architectural envelope: regular at r=0 and decaying at large r.
         return (rc**l) * torch.exp(-self.beta * rc) * raw
 
     def Theta(self, th, E_vec, sample, st):
@@ -102,7 +118,9 @@ class GlobalContextParamNet(nn.Module):
 
     def forward(self, X):
         h = self.encoder(X)
-        h_global = h.mean(dim=0)  # permutation-invariant pooling over nuclei
+        # Mean pooling makes the inferred global distribution invariant to the
+        # order in which nucleus/species systems are supplied.
+        h_global = h.mean(dim=0)
         mu = self.mu_head(h_global)
         logvar = self.logvar_head(h_global)
         sigma = torch.exp(0.5 * logvar)

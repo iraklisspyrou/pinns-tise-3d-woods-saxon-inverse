@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 
-from ws_pinn.config import load_config, training_kwargs
+from ws_pinn.config import load_config, training_settings
 from ws_pinn.runtime import configure_runtime
 
 
@@ -23,11 +23,12 @@ def main() -> None:
     )
 
     # Import after runtime configuration so every module uses the requested device.
-    from ws_pinn.training import train_global_multinucleus_instrumented
+    from ws_pinn.training import train_global_multinucleus
 
-    train_global_multinucleus_instrumented(**training_kwargs(config))
+    # The training engine receives one resolved mapping.  No second set of
+    # experiment defaults is maintained inside ``training.py``.
+    train_global_multinucleus(training_settings(config))
 
 
 if __name__ == "__main__":
     main()
-

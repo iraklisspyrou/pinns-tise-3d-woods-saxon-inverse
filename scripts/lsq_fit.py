@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
@@ -83,8 +83,11 @@ def load_npz_dataset(path: Path) -> pd.DataFrame:
                 "state_type": str(st.get("state_type", "")).strip().lower(),
             })
     df = pd.DataFrame(rows)
-    if len(df) != 86:
-        print(f"Warning: Schwierz bound-state dataset normally has 86 levels; loaded {len(df)}.")
+    if len(df) != 96:
+        print(
+            "Warning: the public experimental archive contains 96 levels; "
+            f"loaded {len(df)}."
+        )
     return df
 
 

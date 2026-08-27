@@ -26,12 +26,12 @@ except Exception:
     wandb = None
     WANDB_AVAILABLE = False
 
-from .constants import R_MAX, PI, TWOPI
-from .runtime import device
+from .constants import PI, R_MAX, TWOPI
 from .inference import infer_global_parameters, infer_physical_mean_parameters
-from .parameters import DEFAULT_BOUNDS, ParameterBounds
 from .losses import energy_rayleigh_full3d
-from .wavefunctions import eval_Phi, eval_R, eval_Theta, eval_psi_norm, psi_scale_only
+from .parameters import DEFAULT_BOUNDS, ParameterBounds
+from .runtime import device
+from .wavefunctions import eval_psi_norm, eval_R, psi_scale_only
 
 PARAM_NAMES = ['V0', 'kappa', 'r0', 'a', 'lam_so', 'r0_so']
 PARAM_LABELS = {'V0': r'$V_0$', 'kappa': r'$\kappa$', 'r0': r'$r_0$', 'a': r'$a$', 'lam_so': r'$\lambda_{\mathrm{SO}}$', 'r0_so': r'$r_{0,\mathrm{SO}}$'}
@@ -561,6 +561,12 @@ def collect_radial_probability_data(
     Nth_norm=256,
     Nph_norm=256,
 ):
+    """Sample normalized radial probabilities on a plotting grid.
+
+    ``n_r`` controls only the smoothness of the exported curve.  ``Nr_norm``,
+    ``Nth_norm``, and ``Nph_norm`` are the quadrature resolutions used to
+    compute the full separable normalization coefficient.
+    """
     wave_net.eval()
 
     E_vec = torch.tensor(
@@ -601,6 +607,7 @@ def plot_radial_wavefunctions(
     wave_net,
     samples,
     out_dir,
+    n_r=800,
     Nr_norm=512,
     Nth_norm=256,
     Nph_norm=256,
@@ -616,6 +623,7 @@ def plot_radial_wavefunctions(
         records = collect_radial_probability_data(
             wave_net,
             sample,
+            n_r=n_r,
             Nr_norm=Nr_norm,
             Nth_norm=Nth_norm,
             Nph_norm=Nph_norm,
@@ -651,13 +659,16 @@ def plot_theta_phi_heatmaps(
     Nph_norm=256,
     max_cases=2,
     max_states_per_case=3,
+    radial_peak_points=600,
     n_theta=160,
     n_phi=220,
     log_wandb=True,
 ):
     """
     Heavy final diagnostic. To control runtime, only the first max_cases and
-    first max_states_per_case are plotted by default.
+    first max_states_per_case are plotted by default.  The heatmap and radial
+    peak grids are visualization grids; normalization continues to use the
+    three ``*_norm`` resolutions supplied by the experiment configuration.
     """
     out_dir = ensure_dir(out_dir)
     paths = []
@@ -673,7 +684,7 @@ def plot_theta_phi_heatmaps(
         radial = collect_radial_probability_data(
             wave_net,
             sample,
-            n_r=600,
+            n_r=radial_peak_points,
             Nr_norm=Nr_norm,
             Nth_norm=Nth_norm,
             Nph_norm=Nph_norm,
@@ -751,6 +762,7 @@ def plot_full_psi2_slice_vs_theta(
     Nth_norm=256,
     Nph_norm=256,
     max_cases=None,
+    radial_peak_points=600,
     n_theta=400,
     phi0=0.0,
     use_common_r0=True,
@@ -798,7 +810,7 @@ def plot_full_psi2_slice_vs_theta(
         radial_records = collect_radial_probability_data(
             wave_net,
             sample,
-            n_r=600,
+            n_r=radial_peak_points,
             Nr_norm=Nr_norm,
             Nth_norm=Nth_norm,
             Nph_norm=Nph_norm,
@@ -964,6 +976,7 @@ def plot_overlap_matrices(
     Nth_norm=256,
     Nph_norm=256,
     max_cases=3,
+    n_points=8000,
     log_wandb=True,
 ):
     out_dir = ensure_dir(out_dir)
@@ -977,6 +990,7 @@ def plot_overlap_matrices(
             Nr_norm=Nr_norm,
             Nth_norm=Nth_norm,
             Nph_norm=Nph_norm,
+            n_points=n_points,
         )
 
         labels = [state_short_label(st) for st in sample["states"]]

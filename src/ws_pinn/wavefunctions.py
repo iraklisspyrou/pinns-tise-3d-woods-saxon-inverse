@@ -2,9 +2,10 @@
 
 import torch
 
-from .constants import R_MAX, PI, TWOPI
+from .constants import PI, R_MAX, TWOPI
 from .runtime import device
 from .scaling import scale_energy, scale_nucleus, scale_quantum
+
 
 def d(f, x):
     return torch.autograd.grad(
@@ -16,7 +17,14 @@ def d(f, x):
     )[0]
 
 
-def make_grids(Nr=512, Nth=256, Nph=256, requires_grad=True):
+def make_grids(Nr, Nth, Nph, requires_grad=True):
+    """Construct differentiable spherical-coordinate quadrature grids.
+
+    Production calls pass ``Nr``, ``Nth``, and ``Nph`` from the YAML
+    ``quadrature`` section.  The polar endpoints are displaced from the
+    coordinate singularities, and the duplicated periodic endpoint at
+    ``2*pi`` is omitted from the azimuthal grid.
+    """
     r = torch.linspace(0.0, R_MAX, Nr, device=device).unsqueeze(1)
     th = torch.linspace(1e-5, PI - 1e-5, Nth, device=device).unsqueeze(1)
     ph = torch.linspace(0.0, TWOPI, Nph + 1, device=device)[:-1].unsqueeze(1)
@@ -38,7 +46,14 @@ def eval_Phi(wave_net, ph, E_vec, sample, st):
     return wave_net.Phi(ph, E_vec, sample, st)
 
 
-def norm_parts(wave_net, E_vec, sample, st, Nr=512, Nth=256, Nph=256, eps=1e-12):
+def norm_parts(wave_net, E_vec, sample, st, Nr, Nth, Nph, eps=1e-12):
+    """Return separated norm integrals and the full normalization coefficient.
+
+    The volume element is ``r^2 sin(theta) dr dtheta dphi``.  Following the
+    manuscript convention, the single coefficient
+    ``alpha=(I_R I_theta I_phi)^(-1/2)`` is later applied to the radial
+    component only; it is not three independent normalization operations.
+    """
     r, th, ph = make_grids(Nr, Nth, Nph, requires_grad=True)
 
     Rv = eval_R(wave_net, r, E_vec, sample, st)
@@ -60,7 +75,7 @@ def norm_parts(wave_net, E_vec, sample, st, Nr=512, Nth=256, Nph=256, eps=1e-12)
     return IR, Ith, Iphi, Iang, I, s, r, th, ph
 
 
-def psi_scale_only(wave_net, E_vec, sample, st, Nr=512, Nth=256, Nph=256):
+def psi_scale_only(wave_net, E_vec, sample, st, Nr, Nth, Nph):
     IR, Ith, Iphi, Iang, I, s, *_ = norm_parts(
         wave_net,
         E_vec,
@@ -73,12 +88,12 @@ def psi_scale_only(wave_net, E_vec, sample, st, Nr=512, Nth=256, Nph=256):
     return IR, Ith, Iphi, Iang, I, s
 
 
-def eval_R_norm(wave_net, r, E_vec, sample, st, Nr=512, Nth=256, Nph=256):
+def eval_R_norm(wave_net, r, E_vec, sample, st, Nr, Nth, Nph):
     _, _, _, _, _, s = psi_scale_only(wave_net, E_vec, sample, st, Nr, Nth, Nph)
     return s * eval_R(wave_net, r, E_vec, sample, st), s
 
 
-def eval_psi_norm(wave_net, r, th, ph, E_vec, sample, st, Nr=512, Nth=256, Nph=256):
+def eval_psi_norm(wave_net, r, th, ph, E_vec, sample, st, Nr, Nth, Nph):
     _, _, _, _, _, s = psi_scale_only(wave_net, E_vec, sample, st, Nr, Nth, Nph)
     Rv = eval_R(wave_net, r, E_vec, sample, st)
     Thv = eval_Theta(wave_net, th, E_vec, sample, st)
@@ -90,10 +105,10 @@ def make_param_input_from_radial_psi(
     wave_net,
     sample,
     E_vec,
-    n_r_points=96,
-    Nr_norm=512,
-    Nth_norm=256,
-    Nph_norm=256,
+    n_r_points,
+    Nr_norm,
+    Nth_norm,
+    Nph_norm,
     radial_normalization="full_separable",
     sign_probe_index=5,
 ):
@@ -112,6 +127,8 @@ def make_param_input_from_radial_psi(
     component only. ``radial_l2`` reproduces the uploaded legacy script and is
     retained only for evaluating checkpoints trained with that input convention.
     """
+    # ParamNet sees the wavefunction at a fixed, ordered radial probe grid.
+    # Its resolution is configured independently from the norm quadrature.
     r = torch.linspace(0.0, R_MAX, n_r_points, device=device).unsqueeze(1)
     radial_parts = []
 
@@ -156,10 +173,10 @@ def make_param_input_from_radial_psi(
 def make_global_param_context(
     wave_net,
     samples,
-    n_r_points=96,
-    Nr_norm=512,
-    Nth_norm=256,
-    Nph_norm=256,
+    n_r_points,
+    Nr_norm,
+    Nth_norm,
+    Nph_norm,
     radial_normalization="full_separable",
     sign_probe_index=5,
 ):

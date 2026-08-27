@@ -65,11 +65,25 @@ def _resolve_repo_path(config: dict[str, Any], value: str) -> str:
     return str(path.resolve())
 
 
-def training_kwargs(config: dict[str, Any]) -> dict[str, Any]:
-    """Translate the nested public configuration into the training API."""
+def _config_snapshot(config: dict[str, Any]) -> dict[str, Any]:
+    """Return the resolved public YAML values without internal path helpers."""
+    snapshot = deepcopy(config)
+    snapshot.pop("_config_path", None)
+    snapshot.pop("_repository_root", None)
+    return snapshot
+
+
+def training_settings(config: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the YAML into the single settings mapping consumed by training.
+
+    Defaults live here rather than in ``training.py``.  Consequently, the CLI
+    and programmatic training paths cannot silently use different datasets,
+    quadrature sizes, loss weights, or model architectures.
+    """
     data = _required(config, "data", "root")
     model = config.get("model", {})
     quadrature = config.get("quadrature", {})
+    diagnostics = config.get("diagnostics", {})
     training = config.get("training", {})
     weights = config.get("loss_weights", {})
     scheduler = config.get("scheduler", {})
@@ -89,7 +103,9 @@ def training_kwargs(config: dict[str, Any]) -> dict[str, Any]:
         cases.append((int(A), int(Z), species_text in {"proton", "p"}))
 
     return {
+        "experiment_name": str(config["experiment"].get("name", "ws_pinn")),
         "potential": str(config["experiment"]["potential"]).lower(),
+        "data_mode": str(data.get("mode", "unknown")),
         "dataset_path": _resolve_repo_path(config, _required(data, "path", "data")),
         "cases": cases,
         "max_states": int(data.get("states_per_system", 6)),
@@ -157,4 +173,29 @@ def training_kwargs(config: dict[str, Any]) -> dict[str, Any]:
         "final_wavefunction_cases": int(output.get("wavefunction_cases", 4)),
         "final_heatmap_cases": int(output.get("heatmap_cases", 2)),
         "final_overlap_cases": int(output.get("overlap_cases", 3)),
+        # Plot sampling is intentionally separate from the quadrature used in
+        # the loss and normalization integrals.
+        "diagnostic_radial_points": int(
+            diagnostics.get("radial_plot_points", 800)
+        ),
+        "diagnostic_peak_radial_points": int(
+            diagnostics.get("radial_peak_points", 600)
+        ),
+        "diagnostic_heatmap_theta_points": int(
+            diagnostics.get("heatmap_theta_points", 160)
+        ),
+        "diagnostic_heatmap_phi_points": int(
+            diagnostics.get("heatmap_phi_points", 220)
+        ),
+        "diagnostic_theta_slice_points": int(
+            diagnostics.get("theta_slice_points", 400)
+        ),
+        "diagnostic_overlap_points": int(
+            diagnostics.get("overlap_points", 8000)
+        ),
+        "source_config": _config_snapshot(config),
     }
+
+
+# Backward-compatible name for callers using the first modular release.
+training_kwargs = training_settings
