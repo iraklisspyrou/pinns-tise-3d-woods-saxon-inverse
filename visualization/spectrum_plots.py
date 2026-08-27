@@ -1,4 +1,4 @@
-"""Create publication level-scheme plots and save both PDF and PNG files."""
+"""Create spectrum plots."""
 
 from __future__ import annotations
 
