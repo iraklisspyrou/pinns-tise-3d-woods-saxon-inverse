@@ -128,6 +128,34 @@ def radial_eigenvalues(
     n_grid: int = 2400,
 ) -> np.ndarray:
     """Solve the Dirichlet problem for u(r)=rR(r) on an interior grid."""
+    _, _, diagonal, off_diagonal = _radial_operator(
+        A, Z, is_proton, l, j, params, potential, r_max, n_grid
+    )
+    upper = min(max(n_eigenvalues - 1, 0), diagonal.size - 1)
+    values = eigh_tridiagonal(
+        diagonal,
+        off_diagonal,
+        select="i",
+        select_range=(0, upper),
+        check_finite=False,
+        eigvals_only=True,
+    )
+    return np.asarray(values, dtype=float)
+
+
+def _radial_operator(
+    A: int,
+    Z: int,
+    is_proton: bool,
+    l: int,
+    j: float,
+    params: FDParameters,
+    potential: str,
+    r_max: float,
+    n_grid: int,
+) -> tuple[np.ndarray, float, np.ndarray, np.ndarray]:
+    if n_grid < 4:
+        raise ValueError("n_grid must be at least 4")
     full_grid = np.linspace(0.0, r_max, n_grid)
     r = full_grid[1:-1]
     dr = full_grid[1] - full_grid[0]
@@ -139,16 +167,46 @@ def radial_eigenvalues(
     )
     diagonal = 2.0 * kinetic_factor / dr**2 + potential_values
     off_diagonal = np.full(r.size - 1, -kinetic_factor / dr**2)
+    return full_grid, dr, diagonal, off_diagonal
+
+
+def radial_eigenpairs(
+    A: int,
+    Z: int,
+    is_proton: bool,
+    l: int,
+    j: float,
+    params: FDParameters,
+    potential: str,
+    n_eigenvalues: int = 8,
+    r_max: float = 25.0,
+    n_grid: int = 2400,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return energies, full radial grid and normalized reduced functions u=rR.
+
+    Columns of the returned functions have zero Dirichlet endpoints and
+    satisfy sum_i |u_i|^2 dr = 1. The largest-magnitude interior value is
+    chosen positive to fix the otherwise arbitrary eigenvector sign.
+    """
+    grid, dr, diagonal, off_diagonal = _radial_operator(
+        A, Z, is_proton, l, j, params, potential, r_max, n_grid
+    )
     upper = min(max(n_eigenvalues - 1, 0), diagonal.size - 1)
-    values = eigh_tridiagonal(
+    values, vectors = eigh_tridiagonal(
         diagonal,
         off_diagonal,
         select="i",
         select_range=(0, upper),
         check_finite=False,
-        eigvals_only=True,
+        eigvals_only=False,
     )
-    return np.asarray(values, dtype=float)
+    reduced = np.zeros((n_grid, len(values)), dtype=float)
+    reduced[1:-1] = vectors / np.sqrt(dr)
+    for column in reduced.T:
+        pivot = np.argmax(np.abs(column))
+        if column[pivot] < 0:
+            column *= -1.0
+    return np.asarray(values, dtype=float), grid, reduced
 
 
 def allowed_j(l: int) -> tuple[float, ...]:
@@ -264,4 +322,3 @@ def validate_against_dataset(
                 }
             )
     return rows
-

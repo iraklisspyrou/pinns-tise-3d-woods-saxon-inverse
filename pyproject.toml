@@ -18,7 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 tracking = ["wandb>=0.16"]
+bayesian = ["emcee>=3.1,<4"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
