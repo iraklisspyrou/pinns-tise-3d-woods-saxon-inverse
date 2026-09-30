@@ -28,6 +28,8 @@ It combines:
   the six global interaction parameters.
 - An independent radial finite-difference solver for closure validation.
 - A deterministic finite-difference least-squares baseline.
+- An integrated numerical FD + least-squares + MCMC baseline that also
+  generates separated three-dimensional wavefunction samples.
 
 All datasets used by the public scripts are included under [`data/`](data/).
 The code, configuration files, validation tools and plotting scripts needed to
@@ -223,6 +225,65 @@ python scripts/lsq_fit.py \
 
 This fits the same 42 identification levels with the independent
 finite-difference solver; it is not the original Seminole fit.
+
+### Integrated FD + least-squares + MCMC baseline
+
+Install the optional ensemble sampler:
+
+```bash
+python -m pip install -e ".[bayesian]"
+```
+
+From the repository root, run the experimental 42-level baseline:
+
+```bash
+python scripts/fd_mcmc.py \
+  --config configs/seminole.yaml \
+  --dataset data/experimental_dataset.npz \
+  --output-dir outputs/fd_mcmc \
+  --walkers 20 --steps 500 --burn-in 100 --seed 12345
+```
+
+This single workflow performs bounded LSQ, samples the six-parameter posterior
+with the independent FD energy likelihood, and generates full spatial
+wavefunctions for selected posterior draws. It uses the **same 42
+identification states** as the PINN and labels the other 54 levels as held
+out. The Gaussian likelihood assumes independent 1 MeV effective energy
+errors by default (`--sigma-mev`); this is a modeling choice, not a measured
+uncertainty. Parameter priors are uniform over the six bounds in the YAML.
+`--prescription direct` matches the nuclear inputs passed to the PINN;
+`--prescription schwierz` switches the particle/hole mapping used by the
+original standalone LSQ script. Record the selected convention in comparisons.
+
+The radial eigenvalue problem uses the specialized tridiagonal solver. For
+wavefunctions, it also requests radial eigenvectors. The polar equation is
+solved by conservative finite differences with regular endpoint conditions,
+and the `m_l=0` azimuthal ODE is solved with periodic finite differences. No
+tabulated spherical harmonics are used. The numerical angular modes depend
+only on `(l, m_l)` and are cached across LSQ/MCMC proposals. The full
+wavefunction is the product `R(r) * Theta(theta) * Phi(phi)` under the scalar
+spin-orbit projection used in the paper; this is a separated 3D solution, not
+a general Cartesian 3D grid discretization.
+
+The command writes `summary.json` (separate LSQ, MCMC, angular, spectral
+prediction, spatial, and total timings; software versions and diagnostics),
+`posterior_chain.npz` (all chains and selected posterior draws),
+`selected_states.csv`, `all_states_and_split.csv`,
+`posterior_state_predictions.csv` (including the held-out levels), and
+`spatial_state_36.npz` by default. Change `--spatial-indices 36,37` to
+save other states; indices refer to `selected_states.csv`. Each spatial file
+contains the radial samples, numerically solved angular modes, LSQ and one
+posterior wavefunction on a 3D grid, and posterior density mean, spread, and
+quantiles. Any sampled 3D wavefunction can be reconstructed as the outer
+product of its saved `radial_draws` row with `polar` and `azimuthal`.
+
+The default 500-step run is a starting configuration, **not** a claim of
+convergence. Inspect the acceptance fractions, traces and estimated
+autocorrelation times in `summary.json` and `posterior_chain.npz`; extend the
+chain and repeat with independent seeds until posterior summaries stabilize.
+With no spatial wavefunction observations, the MCMC posterior is conditioned
+on energies alone. Spatial variation across draws is a derived prediction,
+not a separately calibrated wavefunction posterior.
 
 ### Generate figures
 
