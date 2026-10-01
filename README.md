@@ -285,6 +285,53 @@ With no spatial wavefunction observations, the MCMC posterior is conditioned
 on energies alone. Spatial variation across draws is a derived prediction,
 not a separately calibrated wavefunction posterior.
 
+### Checkpoints and Colab storage
+
+Sampling writes `mcmc_checkpoint.npz` every 50 steps and after the final
+sampling step, before predictive postprocessing. Change the interval with
+`--checkpoint-every`. Each checkpoint contains the complete chain, log
+probabilities, sampler random state, original LSQ fit and cumulative counters.
+The previous checkpoint is replaced only after the new archive has been
+fully written. An existing checkpoint is protected from an accidental fresh
+run; select a new output directory or use `--resume`.
+
+Colab's `/content` filesystem is temporary. **Mount Google Drive first and
+write the output directory there** so saved progress survives runtime deletion:
+
+```python
+from google.colab import drive
+drive.mount("/content/drive")
+```
+
+After cloning/installing the repository, run from its root:
+
+```bash
+python scripts/fd_mcmc.py \
+  --output-dir /content/drive/MyDrive/ws_pinn_results/fd_mcmc_2500 \
+  --walkers 20 --steps 2500 --burn-in 500 \
+  --posterior-draws 100 --sigma-mev 1.0 --seed 12345
+```
+
+After an interruption, mount Drive, reinstall the same code and software, and
+run the same command with `--resume`. **`--steps` is the total target, not the
+number of additional steps**: a checkpoint at 800 steps with `--steps 2500`
+needs 1,700 more steps. To extend a completed chain, increase the target and
+use `--resume`. If the target is already complete, resume regenerates the
+predictive files without rerunning sampling.
+
+Resume validates the dataset bytes, parameter bounds, error model, radial
+grid, particle/hole prescription, walker count, seed, solver source and
+NumPy/SciPy/emcee versions. Burn-in and predictive/spatial output settings
+can change without changing the sampled posterior. Predictive draw selection
+uses a separate seeded generator, so it is reproducible after resume.
+Cumulative timing covers recorded work through checkpoints; work lost after
+the last checkpoint cannot be counted. Drive persistence requires a working
+mount: checkpoints saved only under `/content` are still temporary.
+
+Older `posterior_chain.npz` archives lack the sampler random state and
+compatibility metadata and are not accepted by this `--resume` option.
+Notebook console output alone cannot reconstruct a deleted chain.
+
 ### Generate figures
 
 ```bash

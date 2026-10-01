@@ -11,6 +11,7 @@ equations do not depend on the Woods--Saxon interaction parameters.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ from lsq_fit import (
     load_npz_dataset,
     solver_nucleus,
 )
+from mcmc_checkpoint import load_checkpoint, save_checkpoint
 from ws_pinn.fd_solver import FDParameters, radial_eigenpairs, radial_eigenvalues
 from ws_pinn.fd_spatial import azimuthal_mode, polar_mode, spatial_density
 
@@ -173,6 +175,10 @@ def main() -> None:
     parser.add_argument("--posterior-draws", type=int, default=24)
     parser.add_argument("--walkers", type=int, default=20)
     parser.add_argument("--steps", type=int, default=500)
+    parser.add_argument("--checkpoint-every", type=int, default=50,
+                        help="Save sampling progress every this many steps")
+    parser.add_argument("--resume", action="store_true",
+                        help="Continue output-dir/mcmc_checkpoint.npz; steps is the TOTAL target")
     parser.add_argument("--burn-in", type=int, default=100)
     parser.add_argument("--n-starts", type=int, default=1)
     parser.add_argument("--max-nfev", type=int, default=200)
@@ -187,6 +193,8 @@ def main() -> None:
         parser.error("posterior-draws, n-starts and max-nfev must be positive")
     if args.n_r_spatial < 4:
         parser.error("n-r-spatial must be >= 4")
+    if args.checkpoint_every < 1:
+        parser.error("checkpoint-every must be positive")
 
     try:
         import emcee
@@ -197,6 +205,41 @@ def main() -> None:
     rng = np.random.default_rng(args.seed)
     np.random.seed(args.seed)  # emcee 3 uses NumPy's legacy RNG for proposals
     low, high = config_bounds(args.config)
+    # Only posterior-defining inputs belong in the compatibility signature.
+    # Burn-in and predictive/spatial output settings may change on resume.
+    solver_sources = [Path(__file__), Path(__file__).with_name("lsq_fit.py"),
+                      Path(__file__).resolve().parents[1] / "src/ws_pinn/fd_solver.py"]
+    settings = {
+        "checkpoint_version": 1,
+        "dataset_sha256": hashlib.sha256(args.dataset.read_bytes()).hexdigest(),
+        "solver_sha256": hashlib.sha256(b"".join(p.read_bytes() for p in solver_sources)).hexdigest(),
+        "parameter_bounds": [low.tolist(), high.tolist()],
+        "prescription": args.prescription, "sigma_mev": args.sigma_mev,
+        "r_max": args.r_max, "n_grid": args.n_grid,
+        "walkers": args.walkers, "seed": args.seed,
+        "numpy": np.__version__, "scipy": scipy.__version__, "emcee": emcee.__version__,
+    }
+    checkpoint_path = args.output_dir / "mcmc_checkpoint.npz"
+    old_chain = np.empty((0, args.walkers, 6))
+    old_log_probability = np.empty((0, args.walkers))
+    old_random_state, previous = None, {}
+    if args.resume:
+        if not checkpoint_path.is_file():
+            parser.error(f"No checkpoint to resume: {checkpoint_path}")
+        try:
+            old_chain, old_log_probability, old_random_state, previous = load_checkpoint(
+                checkpoint_path, settings
+            )
+        except (ValueError, KeyError, OSError) as exc:
+            parser.error(str(exc))
+        if args.steps < len(old_chain):
+            parser.error(f"Checkpoint already has {len(old_chain)} steps; steps is the TOTAL target")
+        print(f"Resuming {len(old_chain)} saved steps toward {args.steps} total", flush=True)
+    elif checkpoint_path.exists():
+        parser.error("Checkpoint already exists. Use --resume or a new output directory.")
+    previous_elapsed = previous.get("elapsed_seconds", 0.0)
+    previous_forward_calls = previous.get("forward_calls", 0)
+    previous_channel_solves = previous.get("channel_eigensolves", 0)
     full = load_npz_dataset(args.dataset).reset_index(drop=True)
     selected = build_pinn_identification_set(full)
     selected_mask = full_selection_mask(full, selected)
@@ -216,11 +259,11 @@ def main() -> None:
     angular_start = perf_counter()
     polar_solutions = {l: polar_mode(l, args.n_theta) for l in sorted(set(selected.l))}
     phi_grid, phi_mode, phi_eigenvalue = azimuthal_mode(args.n_phi)
-    angular_seconds = perf_counter() - angular_start
+    angular_seconds = previous.get("angular_seconds", 0.0) + perf_counter() - angular_start
 
     fit_start = perf_counter()
     fit_runs = []
-    for start_id in range(args.n_starts):
+    for start_id in range(0 if args.resume else args.n_starts):
         x0 = np.clip(SEMINOLE_REFERENCE, low + 1e-6, high - 1e-6) if start_id == 0 else rng.uniform(low, high)
 
         def residual(x: np.ndarray) -> np.ndarray:
@@ -233,12 +276,19 @@ def main() -> None:
         fit_runs.append(fit)
         print(f"LSQ start {start_id + 1}/{args.n_starts}: cost={fit.cost:.5f}, "
               f"nfev={fit.nfev}, success={fit.success}", flush=True)
-    best_fit = min(fit_runs, key=lambda result: result.cost)
-    fit_seconds = perf_counter() - fit_start
-    best_x = best_fit.x
+    if args.resume:
+        fit_info = previous["lsq"]
+        best_x = np.asarray(fit_info["parameters"], dtype=float)
+        fit_seconds = previous["fit_seconds"]
+    else:
+        best_fit = min(fit_runs, key=lambda result: result.cost)
+        fit_seconds = perf_counter() - fit_start
+        best_x = best_fit.x
+        fit_info = {"parameters": best_x.tolist(), "nfev": int(best_fit.nfev),
+                    "success": bool(best_fit.success), "n_starts": args.n_starts}
 
-    posterior_calls = 0
-    rejected_by_prior = 0
+    posterior_calls = previous.get("likelihood_evaluations", 0)
+    rejected_by_prior = previous.get("prior_rejections", 0)
 
     def log_probability(x: np.ndarray) -> float:
         nonlocal posterior_calls, rejected_by_prior
@@ -251,15 +301,53 @@ def main() -> None:
         return -0.5 * float(np.dot(residual_vector, residual_vector))
 
     mcmc_start = perf_counter()
-    starting_positions = bounded_walkers(rng, best_x, low, high, args.walkers)
+    if args.resume:
+        starting_positions = emcee.State(old_chain[-1], log_prob=old_log_probability[-1],
+                                        random_state=old_random_state)
+    else:
+        starting_positions = bounded_walkers(rng, best_x, low, high, args.walkers)
     sampler = emcee.EnsembleSampler(args.walkers, 6, log_probability)
-    sampler.run_mcmc(starting_positions, args.steps, progress=False)
-    mcmc_seconds = perf_counter() - mcmc_start
-    chain = sampler.get_chain()
-    posterior = sampler.get_chain(discard=args.burn_in, flat=True)
-    draws = posterior[rng.choice(len(posterior), size=min(args.posterior_draws, len(posterior)), replace=False)]
+    accepted_before = np.asarray(previous.get("accepted_per_walker", np.zeros(args.walkers)))
+    old_mcmc_seconds = previous.get("mcmc_seconds", 0.0)
+
+    def sampling_snapshot():
+        if sampler.iteration:
+            current_chain = np.concatenate((old_chain, sampler.get_chain()))
+            current_log = np.concatenate((old_log_probability, sampler.get_log_prob()))
+            state = sampler.get_last_sample().random_state
+            accepted = accepted_before + sampler.acceptance_fraction * sampler.iteration
+        else:
+            current_chain, current_log, state = old_chain, old_log_probability, old_random_state
+            accepted = accepted_before
+        metadata = {
+            "settings": settings, "lsq": fit_info, "fit_seconds": fit_seconds,
+            "angular_seconds": angular_seconds,
+            "mcmc_seconds": old_mcmc_seconds + perf_counter() - mcmc_start,
+            "elapsed_seconds": previous_elapsed + perf_counter() - total_start,
+            "accepted_per_walker": accepted.tolist(),
+            "likelihood_evaluations": posterior_calls, "prior_rejections": rejected_by_prior,
+            "forward_calls": previous_forward_calls + model.calls + full_model.calls,
+            "channel_eigensolves": previous_channel_solves + model.channel_solves + full_model.channel_solves,
+        }
+        return current_chain, current_log, state, accepted, metadata
+
+    remaining = args.steps - len(old_chain)
+    while remaining:
+        count = min(args.checkpoint_every, remaining)
+        sampler.run_mcmc(starting_positions, count, progress=False)
+        starting_positions = None  # Subsequent chunks continue this sampler.
+        remaining -= count
+        chain, log_probabilities, random_state, accepted, metadata = sampling_snapshot()
+        save_checkpoint(checkpoint_path, chain, log_probabilities, random_state, metadata)
+        print(f"Checkpoint saved: {len(chain)}/{args.steps} steps", flush=True)
+    chain, log_probabilities, random_state, accepted, metadata = sampling_snapshot()
+    mcmc_seconds = metadata["mcmc_seconds"]
+    acceptance_fraction = accepted / len(chain)
+    posterior = chain[args.burn_in:].reshape(-1, 6)
+    predictive_rng = np.random.default_rng(args.seed)
+    draws = posterior[predictive_rng.choice(len(posterior), size=min(args.posterior_draws, len(posterior)), replace=False)]
     try:
-        tau = sampler.get_autocorr_time(discard=args.burn_in, tol=0).tolist()
+        tau = emcee.autocorr.integrated_time(chain[args.burn_in:], tol=0).tolist()
         steps_per_tau = ((args.steps - args.burn_in) / np.asarray(tau)).tolist()
     except Exception:
         tau, steps_per_tau = None, None
@@ -326,7 +414,7 @@ def main() -> None:
     np.savez_compressed(
         args.output_dir / "posterior_chain.npz",
         chain=chain,
-        log_probability=sampler.get_log_prob(),
+        log_probability=log_probabilities,
         posterior_draws=draws,
         energy_predictions_all_states=posterior_full,
         parameter_names=np.asarray(PARAMETER_NAMES),
@@ -351,8 +439,8 @@ def main() -> None:
         },
         "lsq": {
             "parameters": dict(zip(PARAMETER_NAMES, map(float, best_x))),
-            "nfev": int(best_fit.nfev), "success": bool(best_fit.success),
-            "n_starts": args.n_starts,
+            "nfev": fit_info["nfev"], "success": fit_info["success"],
+            "n_starts": fit_info["n_starts"],
             "identification_metrics": energy_metrics(lsq_full[selected_mask], full_observations[selected_mask]),
             "held_out_metrics": energy_metrics(lsq_full[~selected_mask], full_observations[~selected_mask]),
         },
@@ -360,7 +448,9 @@ def main() -> None:
             "walkers": args.walkers, "steps": args.steps, "burn_in": args.burn_in,
             "seed": args.seed, "likelihood_evaluations": posterior_calls,
             "prior_rejections": rejected_by_prior,
-            "mean_acceptance_fraction": float(np.mean(sampler.acceptance_fraction)),
+            "mean_acceptance_fraction": float(np.mean(acceptance_fraction)),
+            "resumed_from_steps": len(old_chain),
+            "checkpoint_file": str(checkpoint_path),
             "autocorrelation_time_steps_estimate": tau,
             "post_burnin_steps_per_tau_estimate": steps_per_tau,
             "convergence_verified": False,
@@ -383,10 +473,12 @@ def main() -> None:
             "angular_odes": angular_seconds, "lsq": fit_seconds,
             "mcmc": mcmc_seconds, "posterior_predictive_all_96": predictive_seconds,
             "spatial_wavefunctions": spatial_seconds,
-            "total": perf_counter() - total_start,
+            "total": previous_elapsed + perf_counter() - total_start,
+            "current_invocation": perf_counter() - total_start,
+            "note": "Resumed totals include recorded work through checkpoints; lost work after a checkpoint is not measurable.",
         },
-        "forward_calls": model.calls + full_model.calls,
-        "channel_eigensolves": model.channel_solves + full_model.channel_solves,
+        "forward_calls": previous_forward_calls + model.calls + full_model.calls,
+        "channel_eigensolves": previous_channel_solves + model.channel_solves + full_model.channel_solves,
         "software": {
             "python": platform.python_version(), "numpy": np.__version__,
             "scipy": scipy.__version__, "pandas": pd.__version__,
@@ -396,6 +488,14 @@ def main() -> None:
     }
     with (args.output_dir / "summary.json").open("w", encoding="utf-8") as stream:
         json.dump(summary, stream, indent=2)
+    # Keep completed sampling recoverable even if a later invocation only needs
+    # to rebuild predictive files. Do not count postprocessing as MCMC time.
+    metadata.update(
+        elapsed_seconds=summary["timing_seconds"]["total"],
+        forward_calls=summary["forward_calls"],
+        channel_eigensolves=summary["channel_eigensolves"],
+    )
+    save_checkpoint(checkpoint_path, chain, log_probabilities, random_state, metadata)
     print(f"Completed in {summary['timing_seconds']['total']:.1f} s", flush=True)
     print(f"Mean acceptance fraction: {summary['mcmc']['mean_acceptance_fraction']:.3f}")
     print(f"Results saved to {args.output_dir.resolve()}")
