@@ -12,10 +12,10 @@ data:
       states_per_system: 7
       epochs: 17000
       cases:
+        - [208, 82, neutron]
+        - [132, 50, neutron]
         - [40, 20, neutron]
         - [48, 20, neutron]
-        - [132, 50, neutron]
-        - [208, 82, neutron]
     experimental:
       path: data/experimental_dataset.npz
       output_directory: outputs/seminole_experimental

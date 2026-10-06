@@ -493,6 +493,8 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
         )
 
         if should_log:
+            # Match the Colab trainer: logged statistics advance the shared
+            # training RNG, whose updated state is saved in the checkpoint.
             stats = infer_global_stats(
                 wave_net,
                 param_net,
@@ -505,7 +507,7 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
                 parameter_bounds=parameter_bounds,
                 radial_normalization=radial_normalization,
                 sign_probe_index=sign_probe_index,
-                seed=inference_seed,
+                seed=None,
             )
 
             row = {
