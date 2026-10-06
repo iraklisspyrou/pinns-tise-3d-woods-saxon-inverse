@@ -307,6 +307,11 @@ files can therefore be plotted without retraining.
 Reproducibility notes:
 
 - NumPy and PyTorch seeds are set in the YAML files.
+- Synthetic systems follow the nuclear order `208Pb`, `132Sn`, `40Ca`,
+  `48Ca`, retaining the nucleon species selected in each configuration.
+- Logged parameter statistics use the shared PyTorch training RNG, matching
+  the Colab trainer. Logging frequency and Monte Carlo sample count therefore
+  affect subsequent training draws. Final inference uses `inference.seed`.
 - Each run stores the exact YAML and a complete resolved manifest.
 - The finite-difference solver is independent of the neural-network code.
 - Objective quadrature and plotting grids are configured separately.

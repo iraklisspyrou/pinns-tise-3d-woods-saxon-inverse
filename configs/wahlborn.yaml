@@ -12,14 +12,14 @@ data:
       states_per_system: 7
       epochs: 17000
       cases:
+        - [208, 82, neutron]
+        - [208, 82, proton]
+        - [132, 50, neutron]
+        - [132, 50, proton]
         - [40, 20, neutron]
         - [40, 20, proton]
         - [48, 20, neutron]
         - [48, 20, proton]
-        - [132, 50, neutron]
-        - [132, 50, proton]
-        - [208, 82, neutron]
-        - [208, 82, proton]
     experimental:
       path: data/experimental_dataset.npz
       output_directory: outputs/wahlborn_experimental
