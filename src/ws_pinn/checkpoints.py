@@ -9,6 +9,7 @@ import torch
 from .config import training_kwargs
 from .data_loader import build_multinucleus_samples
 from .models import GlobalContextParamNet, WaveNet3D
+from .normalization import restore_checkpoint_normalization
 from .runtime import device
 
 
@@ -58,6 +59,8 @@ def load_models_and_samples(config: dict, checkpoint_path: str | Path):
 
     wave_net.load_state_dict(wave_state, strict=True)
     param_net.load_state_dict(param_state, strict=True)
+    restore_checkpoint_normalization(
+        wave_net, samples, kwargs, checkpoint, checkpoint_path)
     wave_net.eval()
     param_net.eval()
     return wave_net, param_net, samples, skipped, checkpoint

@@ -44,6 +44,7 @@ from .diagnostics import (
 from .inference import infer_global_raw_latent
 from .losses import compute_multinucleus_loss_full3d
 from .models import GlobalContextParamNet, WaveNet3D
+from .normalization import configure_normalization, restore_checkpoint_normalization
 from .parameters import ParameterBounds
 from .potentials import set_potential_expression
 from .runtime import device, runtime_metadata
@@ -54,7 +55,7 @@ MODULE_NAME = "ws_pinn.training"
 def _json_ready(value: Any) -> Any:
     """Convert resolved settings into JSON/checkpoint-safe values."""
     if isinstance(value, ParameterBounds):
-        return value.to_dict()
+        return _json_ready(value.to_dict())
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, Mapping):
@@ -106,6 +107,9 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
     wORTH = float(_required_setting(settings, "wORTH"))
     wSO = float(_required_setting(settings, "wSO"))
     wKL = float(_required_setting(settings, "wKL"))
+    kl_schedule = settings.get("kl_schedule")
+    phi_only = settings.get("phi_only_normalization", True)
+    polar_rule = settings.get("polar_quadrature", "log_gauss_legendre_v1")
     prior_std = float(_required_setting(settings, "prior_std"))
     parameter_bounds = _required_setting(settings, "parameter_bounds")
     if not isinstance(parameter_bounds, ParameterBounds):
@@ -113,6 +117,8 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
     radial_normalization = str(
         _required_setting(settings, "radial_normalization")
     )
+    if phi_only and radial_normalization != "full_separable":
+        raise ValueError("Phi-only correction requires full_separable probes.")
     sign_probe_index = int(_required_setting(settings, "sign_probe_index"))
     orth_points = int(_required_setting(settings, "orth_points"))
     use_scheduler_wave = bool(_required_setting(settings, "use_scheduler_wave"))
@@ -253,8 +259,6 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
         "runtime": runtime_metadata(),
     }
 
-    with open(out_dir / "run_manifest.json", "w", encoding="utf-8") as f:
-        json.dump(run_manifest, f, indent=2)
 
     # Copy the exact human-authored YAML used to start this run.  The manifest
     # above contains resolved paths and derived values; this file preserves the
@@ -310,6 +314,10 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
     t0 = time.time()
 
     latest_checkpoint_path = checkpoints_dir / "latest_checkpoint.pt"
+    if not resume and (latest_checkpoint_path.exists()
+                       or (out_dir / "normalization_reference.json").exists()):
+        raise ValueError("Fresh runs need a new output directory.")
+    normalization_state = None
 
     def save_training_checkpoint(path, epoch, current_loss):
         """Atomically save everything needed to continue training."""
@@ -330,6 +338,7 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
             "best_epoch": best_epoch,
             "history": history,
             "run_manifest": run_manifest,
+            "normalization_state": normalization_state,
             "torch_rng_state": torch.get_rng_state(),
             "numpy_rng_state": np.random.get_state(),
         }
@@ -349,8 +358,24 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
             map_location="cpu",
             weights_only=False,
         )
+        saved_settings = checkpoint.get("run_manifest", {}).get("resolved_settings", {})
+        for name in ("potential", "parameter_bounds", "radial_normalization", "kl_schedule"):
+            if _json_ready(saved_settings.get(name)) != _json_ready(settings.get(name)):
+                raise ValueError(f"Cannot resume with a different {name}; use a new run.")
         wave_net.load_state_dict(checkpoint["wave_net"])
         param_net.load_state_dict(checkpoint["param_net"])
+        normalization_state = restore_checkpoint_normalization(
+            wave_net, samples, saved_settings, checkpoint, latest_checkpoint_path)
+        if normalization_state is None:
+            if phi_only or polar_rule != "uniform_trapezoid_v1":
+                raise ValueError("Legacy checkpoint: use a new output directory for the Phi fix.")
+            normalization_state = configure_normalization(
+                wave_net, samples, (Nr_norm, Nth_norm, Nph_norm),
+                phi_only=False, polar_rule=polar_rule)
+        else:
+            normalization_state = configure_normalization(
+                wave_net, samples, (Nr_norm, Nth_norm, Nph_norm),
+                phi_only=phi_only, polar_rule=polar_rule, state=normalization_state)
         optimizer_wave.load_state_dict(checkpoint["optimizer_wave"])
         optimizer_param.load_state_dict(checkpoint["optimizer_param"])
 
@@ -393,6 +418,23 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
     elif resume:
         print(f"No existing checkpoint at {latest_checkpoint_path}; starting from epoch 1.")
 
+    if normalization_state is None:
+        normalization_state = configure_normalization(
+            wave_net, samples, (Nr_norm, Nth_norm, Nph_norm),
+            phi_only=phi_only, polar_rule=polar_rule)
+    run_manifest["normalization_correction"] = {
+        "version": normalization_state["version"],
+        "phi_only": phi_only, "polar_quadrature": polar_rule,
+        "radial_factor": "I_phi / I_phi_initial",
+        "probe_factor": "sqrt(I_phi / I_phi_initial)",
+    }
+    for filename, record in [("run_manifest.json", run_manifest),
+                             ("normalization_reference.json", normalization_state)]:
+        path = out_dir / filename
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(json.dumps(record, indent=2))
+        temporary.replace(path)
+
     loss_kwargs = {
         "emm": emm,
         "wE": wE,
@@ -406,6 +448,9 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
     }
 
     for epoch in range(start_epoch, epochs + 1):
+        if kl_schedule is not None:
+            wKL = float(kl_schedule["initial"] if epoch <= kl_schedule["after_epoch"]
+                        else kl_schedule["final"])
         wave_net.train()
         param_net.train()
 
@@ -469,6 +514,7 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
                     "best_epoch": best_epoch,
                     "history": history,
                     "run_manifest": run_manifest,
+                    "normalization_state": normalization_state,
                 },
                 checkpoints_dir / "best_training_loss.pt",
             )
@@ -515,6 +561,7 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
                 "time_sec": time.time() - t0,
                 "loss": loss_value,
                 **metrics,
+                "wKL": wKL,
                 "lr_wave": optimizer_wave.param_groups[0]["lr"],
                 "lr_param": optimizer_param.param_groups[0]["lr"],
                 "grad_norm": float(grad_norm.detach().cpu()),
@@ -538,6 +585,7 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
                 "loss/orthogonality": row.get("LORTH", np.nan),
                 "loss/spin_orbit": row.get("LSO", np.nan),
                 "loss/KL": row.get("LKL", np.nan),
+                "optimization/wKL": wKL,
                 "optimization/lr_wave": row["lr_wave"],
                 "optimization/lr_param": row["lr_param"],
                 "optimization/gradient_norm": row["grad_norm"],
@@ -569,7 +617,7 @@ def train_global_multinucleus(settings: Mapping[str, Any]):
                 param_text = "parameter statistics not logged yet"
 
             print(
-                f"[epoch={epoch:6d}] "
+                f"[epoch={epoch:6d}] wKL={wKL:.1e} "
                 f"loss={loss_value:.3e} "
                 f"LE={metrics.get('LE', float('nan')):.3e} "
                 f"LR={metrics.get('LR', float('nan')):.3e} "

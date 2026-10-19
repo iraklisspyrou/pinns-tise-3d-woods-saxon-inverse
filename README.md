@@ -54,6 +54,19 @@ ParamNet encodes each nucleus/species system and mean-pools the representations,
 so the inferred global distribution is invariant to the order of the supplied
 systems. The paper normalization is retained: a single coefficient computed
 from the full separable wavefunction is applied to the radial component only.
+The current training version additionally removes the incentive to change
+`Phi` amplitude to reduce the radial losses or alter ParamNet inputs. It uses
+`I_phi/I_phi_initial` on radial PDE/boundary losses and
+`sqrt(I_phi/I_phi_initial)` on full-separable radial probes. Each initial Phi
+norm is fixed for that identification context and saved with the checkpoint.
+The physical normalized wavefunction is unchanged. Theta's original network,
+ODE, sampling and amplitude coupling are retained; Phi still learns its ODE,
+periodicity and phase constraints. All networks are updated simultaneously.
+
+The polar norm and Rayleigh-energy integrals use the same endpoint-resolved
+Gauss rule in `t=log(tan(theta/2))`, with `dtheta=sin(theta) dt`, as the working
+Colab experiment. This changes integration nodes, not the uniform 256-point
+polar ODE collocation or the angular network inputs.
 
 ### Joint physics-informed objective
 
@@ -140,6 +153,36 @@ python scripts/train.py --config configs/seminole.yaml
 python scripts/train.py --config configs/wahlborn.yaml
 ```
 
+Both configurations enable the Phi-only correction for synthetic and
+experimental data. Their default KL schedule matches the working Colab run:
+`0.001` for epochs 1–2000, then `0.0001` from epoch 2001. The active weight is
+logged as `wKL` and `optimization/wKL` in W&B. To keep a constant weight, remove
+`training.kl_schedule`; `loss_weights.kl` then applies throughout training.
+Network widths/depths, bounds, learning rates, other loss weights and
+quadrature point counts keep their original configuration values.
+
+```yaml
+normalization:
+  phi_only: true
+  polar_quadrature: log_gauss_legendre_v1
+training:
+  kl_schedule:
+    initial: 1.0e-3
+    final: 1.0e-4
+    after_epoch: 2000
+```
+
+Change `states_per_system` in the selected dataset section for missing-level
+experiments. Point its `path` at an existing noisy dataset for noise tests;
+this change does not regenerate or add noise to any supplied dataset. Reference
+keys include the complete identification energy vector, so repeated noisy
+observations of the same level can have distinct fixed Phi reference norms.
+
+New runs use output folders ending in `_phi_only` to avoid automatically
+resuming a pre-fix experiment. Historical results remain associated with their
+original code/checkpoints and are not relabelled as results from this version.
+
+
 To run the **Seminole experimental** identification, first set
 `data.mode: experimental` in `configs/seminole.yaml`, then execute the first
 command.
@@ -192,7 +235,7 @@ inferred distribution mean:
 
 ```bash
 python scripts/generate_data.py --config configs/seminole.yaml \
-  --parameters outputs/seminole_synthetic/final_global_parameter_prediction.json \
+  --parameters outputs/seminole_synthetic_phi_only/final_global_parameter_prediction.json \
   --output outputs/seminole_pinn_spectrum.npz
 ```
 
@@ -210,7 +253,7 @@ Validate an inferred physical-space distribution mean:
 
 ```bash
 python scripts/fd_validation.py --config configs/seminole.yaml \
-  --parameters outputs/seminole_synthetic/final_global_parameter_prediction.json \
+  --parameters outputs/seminole_synthetic_phi_only/final_global_parameter_prediction.json \
   --dataset data/seminole_synthetic_dataset.npz \
   --output outputs/seminole_inferred_fd.csv
 ```
@@ -289,10 +332,10 @@ not a separately calibrated wavefunction posterior.
 
 ```bash
 python visualization/training_visualization.py \
-  outputs/seminole_synthetic/training_history.csv
+  outputs/seminole_synthetic_phi_only/training_history.csv
 
 python visualization/results_visualization.py \
-  outputs/seminole_synthetic/plots/final/energies/all_nuclei_energy_table.csv
+  outputs/seminole_synthetic_phi_only/plots/final/energies/all_nuclei_energy_table.csv
 
 python visualization/spectrum_plots.py \
   --experimental data/experimental_dataset.npz \

@@ -8,7 +8,7 @@ data:
   datasets:
     synthetic:
       path: data/wahlborn_synthetic_dataset.npz
-      output_directory: outputs/wahlborn_synthetic
+      output_directory: outputs/wahlborn_synthetic_phi_only
       states_per_system: 7
       epochs: 17000
       cases:
@@ -22,7 +22,7 @@ data:
         - [48, 20, proton]
     experimental:
       path: data/experimental_dataset.npz
-      output_directory: outputs/wahlborn_experimental
+      output_directory: outputs/wahlborn_experimental_phi_only
       states_per_system: 6
       epochs: 17000
       cases:
@@ -59,6 +59,12 @@ parameter_bounds:
   a: [0.55, 0.75]
   lam_so: [15.0, 40.0]
   r0_so: [0.90, 1.35]
+
+# Working Colab normalization: only Phi amplitude is removed from radial
+# losses/probes. Theta architecture, ODE and amplitude coupling are retained.
+normalization:
+  phi_only: true
+  polar_quadrature: log_gauss_legendre_v1
 
 quadrature:
   radial: 1024
@@ -107,6 +113,11 @@ training:
   param_learning_rate: 1.0e-3
   latent_prior_std: 2.0
   gradient_clip: 5.0
+  # Omit this block to use the constant loss_weights.kl instead.
+  kl_schedule:
+    initial: 1.0e-3
+    final: 1.0e-4
+    after_epoch: 2000
 
 loss_weights:
   energy: 0.5
