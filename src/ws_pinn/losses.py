@@ -16,6 +16,8 @@ from .wavefunctions import (
     eval_psi_norm,
     make_global_param_context,
     norm_parts,
+    phi_norm_ratio,
+    polar_integral,
     psi_scale_only,
 )
 
@@ -65,9 +67,10 @@ def energy_rayleigh_full3d(
     IVR = torch.trapz(Veff_r2_vals * (Rv.squeeze() ** 2), r1)
 
     sinth = torch.sin(th1).clamp_min(1e-8)
-    Ith = torch.trapz((Thv.squeeze() ** 2) * sinth, th1)
-    Ithprime = torch.trapz((Th_th.squeeze() ** 2) * sinth, th1)
-    Ith_over_sin = torch.trapz((Thv.squeeze() ** 2) / sinth, th1)
+    rule = getattr(wave_net, "polar_quadrature", "log_gauss_legendre_v1")
+    Ith = polar_integral((Thv.squeeze() ** 2) * sinth, th1, rule)
+    Ithprime = polar_integral((Th_th.squeeze() ** 2) * sinth, th1, rule)
+    Ith_over_sin = polar_integral((Thv.squeeze() ** 2) / sinth, th1, rule)
 
     Phi2 = a_re.squeeze() ** 2 + b_im.squeeze() ** 2
     Iphi = torch.trapz(Phi2, ph1)
@@ -142,7 +145,10 @@ def loss_pde_radial_full3d(
         + (Veff_r2_vals - (rc**2) * E_det) * Rn
     )
 
-    return torch.mean(residual**2)
+    value = torch.mean(residual**2)
+    # Separate norm evaluation preserves the working Colab autograd graph.
+    Iphi = norm_parts(wave_net, E_vec, sample, st, Nr_norm, Nth_norm, Nph_norm)[2]
+    return value * phi_norm_ratio(wave_net, E_vec, sample, st, Iphi)
 
 
 def loss_pde_theta_full3d(wave_net, E_vec, sample, st, emm=0, N=256):
@@ -220,7 +226,10 @@ def loss_bc_full3d(
         dRn0 = d(Rn0, r0)
         L_0 = torch.mean(Rn0**2) + torch.mean(dRn0**2)
 
-    return L_Rmax + L_0
+    _, _, Iphi, _, _, _ = psi_scale_only(
+        wave_net, E_vec, sample, st, Nr_norm, Nth_norm, Nph_norm
+    )
+    return (L_Rmax + L_0) * phi_norm_ratio(wave_net, E_vec, sample, st, Iphi)
 
 
 def loss_orthogonality_full3d(

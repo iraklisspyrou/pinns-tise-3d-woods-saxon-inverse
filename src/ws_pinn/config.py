@@ -52,6 +52,26 @@ def load_config(path: str | Path) -> dict[str, Any]:
             "paramnet_input.radial_normalization must be full_separable or radial_l2."
         )
 
+    phi_only = config.get("normalization", {}).get("phi_only", True)
+    if not isinstance(phi_only, bool):
+        raise ValueError("normalization.phi_only must be true or false")
+    if phi_only and normalization != "full_separable":
+        raise ValueError("Phi-only correction requires full_separable radial probes.")
+    rule = config.get("normalization", {}).get("polar_quadrature", "log_gauss_legendre_v1")
+    if rule not in {"log_gauss_legendre_v1", "uniform_trapezoid_v1"}:
+        raise ValueError("Unsupported normalization.polar_quadrature")
+    schedule = config.get("training", {}).get("kl_schedule")
+    if schedule is not None:
+        if (not isinstance(schedule, dict)
+                or set(schedule) != {"initial", "final", "after_epoch"}):
+            raise ValueError("training.kl_schedule requires initial, final and after_epoch")
+        import math
+        if (any(not math.isfinite(float(schedule[k])) or float(schedule[k]) < 0
+                for k in ("initial", "final"))
+                or not isinstance(schedule["after_epoch"], int)
+                or isinstance(schedule["after_epoch"], bool) or schedule["after_epoch"] < 0):
+            raise ValueError("Invalid KL schedule weights or epoch boundary")
+
     ParameterBounds.from_mapping(config.get("parameter_bounds"))
     config["_config_path"] = str(config_path)
     config["_repository_root"] = str(config_path.parent.parent)
@@ -132,6 +152,10 @@ def training_settings(config: dict[str, Any]) -> dict[str, Any]:
         "wSO": float(weights.get("spin_orbit", 0.2)),
         "wKL": float(weights.get("kl", 1e-4)),
         "prior_std": float(training.get("latent_prior_std", 2.0)),
+        "kl_schedule": deepcopy(training.get("kl_schedule")),
+        "phi_only_normalization": config.get("normalization", {}).get("phi_only", True),
+        "polar_quadrature": config.get("normalization", {}).get(
+            "polar_quadrature", "log_gauss_legendre_v1"),
         "parameter_bounds": ParameterBounds.from_mapping(
             config.get("parameter_bounds")
         ),
